@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 4 — Game table (in progress)
+Phase 5 — Bots (in progress)
 
 ## Completed
 
@@ -39,13 +39,21 @@ Phase 4 — Game table (in progress)
 - Deployed Phase 3 and verified create → second-tab join → add hard bot → start with two live browser
   tabs. Both tabs reached the same three-player game state and had no console warnings or errors.
 - Verified a 390-pixel mobile lobby and a 1280 × 720 desktop entry layout through the browser.
+- Built the complete game table with private hands, playable-card states, draw/discard piles,
+  accessible color identities, wild-color selection, turn timing, event feedback, reconnect UX,
+  action loading/error states, results, and host rematches.
+- Deployed Phase 4 and completed a live two-tab game in room `U5MYG`. Both clients reached the
+  same result (山雀 0 cards, 雨燕 7 cards), exposed the correct host/guest rematch controls, and
+  produced no browser console warnings or errors.
+- Captured the deployed result UI at mobile and desktop sizes in
+  `/private/tmp/tetra-colors-phase4-result-host.png` and
+  `/private/tmp/tetra-colors-phase4-result-guest.png`.
 
 ## Remaining
 
-- Build the full table, hand, draw/discard piles, color choice, timer, events, and result views.
-- Add reconnect feedback plus loading and error states for every game action.
-- Complete a full game in multiple browser tabs without state divergence.
-- Continue with Phases 5–6 from `.vscode/init-prompt.md`.
+- Verify easy, standard, and hard bots through the production room action pipeline.
+- Complete a browser game with one human and multiple bots.
+- Continue with Phase 6 from `.vscode/init-prompt.md`.
 
 ## Known issues
 

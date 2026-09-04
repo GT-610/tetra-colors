@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import type { BotDifficulty, CardColor } from "../../src/logic";
 import type { PublicPlayer, RoomSnapshot } from "../../src/protocol";
 import { copy } from "./copy";
+import { GameTable, ResultScreen } from "./game-table";
 import { type ConnectionState, useRoomClient } from "./room-client";
 
 const SHAPE_CLASSES: Record<CardColor, string> = {
@@ -56,27 +57,20 @@ export function App() {
     );
   }
 
+  if (room.snapshot.phase === "finished") {
+    return <ResultScreen snapshot={room.snapshot} onSend={room.send} onLeave={room.leave} />;
+  }
+
   return (
-    <main className="app-shell centered-shell">
-      <section className="panel table-placeholder">
-        <BrandMark />
-        <p className="eyebrow">
-          {copy.room} {room.snapshot.roomCode}
-        </p>
-        <h1>{copy.tableLoading}</h1>
-        <p>{copy.tableLoadingHint}</p>
-        <ul className="mini-hands" aria-label={`${room.snapshot.players.length}${copy.seats}`}>
-          {room.snapshot.players.map((player, index) => (
-            <li key={player.id} className={`mini-hand color-${colorForIndex(index)}`}>
-              {player.handCount}
-            </li>
-          ))}
-        </ul>
-        <button className="button button-ghost" type="button" onClick={room.leave}>
-          {copy.leave}
-        </button>
-      </section>
-    </main>
+    <GameTable
+      key={`${room.snapshot.game?.turnNumber}:${room.snapshot.game?.topDiscard.id}:${room.snapshot.hand.length}:${room.snapshot.game?.drawnCardId ?? ""}`}
+      snapshot={room.snapshot}
+      connectionState={room.connectionState}
+      error={room.error}
+      latestEvent={room.latestEvent}
+      onSend={room.send}
+      onLeave={room.leave}
+    />
   );
 }
 
