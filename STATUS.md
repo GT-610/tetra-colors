@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 1 — Rules core and protocol (in progress)
+Phase 2 — Authoritative room service (in progress)
 
 ## Completed
 
@@ -16,13 +16,20 @@ Phase 1 — Rules core and protocol (in progress)
   `https://tetra-colors.myddz1005.workers.dev`.
 - Verified the deployed desktop and 390 × 844 mobile layouts with no browser warnings or errors.
 - Verified the deployed health and RoomDO endpoints from the real host network.
+- Defined the shared client/server protocol, room snapshots, events, error codes, and input parsing.
+- Implemented a deterministic 108-card rules core with injected randomness and no external runtime
+  dependencies.
+- Implemented matching, draw/play/pass flow, skip, reverse, draw penalties, color choice, draw-four
+  restrictions, discard recycling, winner detection, and three bot decision policies.
+- Passed 18 tests across 4 files, including 100 property runs and 120 mixed-difficulty bot games
+  with state validation on every action.
 
 ## Remaining
 
-- Define the complete shared protocol.
-- Implement deterministic pure game rules with injected randomness.
-- Add unit and property tests plus at least 100 headless bot simulations.
-- Continue with Phases 2–6 from `.vscode/init-prompt.md`.
+- Implement RoomDO creation, joining, reconnect, lobby controls, WebSockets, and per-player views.
+- Add authoritative timers, automatic actions, bot scheduling, limits, and idle cleanup.
+- Add Workers integration tests and a local multi-connection WebSocket smoke test.
+- Continue with Phases 3–6 from `.vscode/init-prompt.md`.
 
 ## Known issues
 
