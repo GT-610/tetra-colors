@@ -14,6 +14,7 @@ import {
   type ServerErrorCode,
   type ServerMessage,
 } from "./protocol";
+import { botDelayMs } from "./room-timing";
 
 const ROOM_STORAGE_KEY = "room";
 const MAX_PLAYERS = 6;
@@ -430,13 +431,18 @@ export class RoomDO extends DurableObject<Env> {
     const player = this.room.players.find((candidate) => candidate.id === playerId);
     if (player?.kind !== "human") return;
 
+    const isLastHuman = !this.room.players.some(
+      (candidate) =>
+        candidate.id !== playerId && candidate.kind === "human" && !candidate.controlledByBot,
+    );
+    if (isLastHuman) {
+      socket.close(1000, "Left room");
+      await this.destroyRoom();
+      return;
+    }
+
     if (this.room.phase === "lobby") {
       this.room.players = this.room.players.filter((candidate) => candidate.id !== playerId);
-      if (this.room.players.length === 0) {
-        socket.close(1000, "Left room");
-        await this.destroyRoom();
-        return;
-      }
       this.reassignHost();
       await this.persistAndBroadcast([]);
     } else {
@@ -604,9 +610,7 @@ export class RoomDO extends DurableObject<Env> {
     const gamePlayer = this.room.game.players[this.room.game.turnIndex];
     const roomPlayer = this.room.players.find((player) => player.id === gamePlayer?.id);
     this.room.scheduledBotAt =
-      roomPlayer && isBotControlled(roomPlayer)
-        ? Date.now() + botDelay(roomPlayer.difficulty ?? "medium")
-        : null;
+      roomPlayer && isBotControlled(roomPlayer) ? Date.now() + botDelayMs(runtimeRandom) : null;
   }
 
   private requireHost(socket: WebSocket, playerId: string): boolean {
@@ -814,16 +818,6 @@ export class RoomDO extends DurableObject<Env> {
 
 function isBotControlled(player: RoomPlayer): boolean {
   return player.kind === "bot" || player.controlledByBot;
-}
-
-function botDelay(difficulty: BotDifficulty): number {
-  const ranges: Record<BotDifficulty, readonly [number, number]> = {
-    easy: [1_200, 2_000],
-    medium: [900, 1_600],
-    hard: [700, 1_300],
-  };
-  const [minimum, maximum] = ranges[difficulty];
-  return Math.floor(minimum + runtimeRandom() * (maximum - minimum));
 }
 
 function runtimeRandom(): number {

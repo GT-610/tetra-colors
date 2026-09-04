@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Post-delivery optimization — Complete
+Post-delivery interaction refinement — In progress
 
 ## Completed
 
@@ -150,10 +150,17 @@ Post-delivery optimization — Complete
 - Switched the game shell to the dynamic viewport height and raised the isolated table-stage
   stacking context above the hand zone. A 390 × 844 browser check resolved the shell to the full
   844-pixel viewport and confirmed table-stage layer 6 above hand-zone layer 5; all 40 tests pass.
+- Destroyed rooms immediately when their last human-controlled seat leaves, including mixed bot
+  lobbies and active games, while retaining bot takeover when another human remains. Added
+  phase-aware exit confirmations, enabled room lookup from a valid room code, expanded the turn
+  timer across the status banner, and randomized bot actions over an inclusive 1–5 second range.
+  Type checking, linting, the production build, and 46 tests pass.
 
 ## Remaining
 
-- External review and merge of the optimization pull request.
+- Add synchronized draw/deal, card-reveal, and skip-status animations while freezing visible game
+  state and player actions until each transition completes.
+- Complete desktop and mobile browser regression, then open the interaction-refinement pull request.
 
 ## Known issues
 

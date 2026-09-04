@@ -22,6 +22,10 @@ export const copy = {
   copyCode: "复制房间码",
   copied: "已复制",
   leave: "离开房间",
+  leaveConfirmation: {
+    "last-human": "你是房间里的最后一名真人玩家。离开后房间会立即销毁，确定离开吗？",
+    "active-game": "对局仍在进行。离开后你的座位将由电脑接管，确定离开吗？",
+  },
   lobbyTitle: "等待玩家",
   lobbyIntro: "邀请朋友输入房间码，房主准备好后即可开始。",
   host: "房主",

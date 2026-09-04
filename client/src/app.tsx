@@ -8,6 +8,7 @@ import {
   type RoomSnapshot,
 } from "../../src/protocol";
 import { copy } from "./copy";
+import { canAttemptJoin, leaveConfirmation } from "./entry-state";
 import { GameTable, ResultScreen } from "./game-table";
 import { type ConnectionState, useRoomClient } from "./room-client";
 
@@ -22,6 +23,11 @@ const PLAYER_COLORS = ["teal", "azure", "amber", "coral"] as const satisfies rea
 
 export function App() {
   const room = useRoomClient();
+  const leave = () => {
+    const confirmation = room.snapshot ? leaveConfirmation(room.snapshot) : null;
+    if (confirmation && !window.confirm(copy.leaveConfirmation[confirmation])) return;
+    room.leave();
+  };
 
   if (!room.session) {
     return (
@@ -43,7 +49,7 @@ export function App() {
           <div className="spinner" aria-hidden="true" />
           <h1>{room.connectionState === "reconnecting" ? copy.reconnecting : copy.connecting}</h1>
           {room.error ? <p className="error-banner">{room.error}</p> : null}
-          <button className="button button-ghost" type="button" onClick={room.leave}>
+          <button className="button button-ghost" type="button" onClick={leave}>
             {copy.leave}
           </button>
         </section>
@@ -58,13 +64,13 @@ export function App() {
         connectionState={room.connectionState}
         error={room.error}
         onSend={room.send}
-        onLeave={room.leave}
+        onLeave={leave}
       />
     );
   }
 
   if (room.snapshot.phase === "finished") {
-    return <ResultScreen snapshot={room.snapshot} onSend={room.send} onLeave={room.leave} />;
+    return <ResultScreen snapshot={room.snapshot} onSend={room.send} onLeave={leave} />;
   }
 
   return (
@@ -74,7 +80,7 @@ export function App() {
       error={room.error}
       latestEvent={room.latestEvent}
       onSend={room.send}
-      onLeave={room.leave}
+      onLeave={leave}
     />
   );
 }
@@ -164,7 +170,7 @@ function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeS
         <button
           className="button button-secondary"
           type="button"
-          disabled={!nicknameValid || !normalizedRoomCode || busy}
+          disabled={!canAttemptJoin(normalizedRoomCode, busy)}
           onClick={() => {
             if (normalizedRoomCode) void onJoin(normalizedNickname, normalizedRoomCode);
           }}

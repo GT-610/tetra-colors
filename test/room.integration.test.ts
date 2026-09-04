@@ -124,7 +124,7 @@ describe("RoomDO integration", () => {
     await expectServerError(guestConnection.inbox, "invalid_action");
   });
 
-  it("advances a bot turn through the short scheduler path", async () => {
+  it("advances a bot turn through the scheduler path", async () => {
     const host = await createRoom("节奏测试");
     const connection = await connect(host);
 
@@ -160,8 +160,6 @@ describe("RoomDO integration", () => {
     const initialBotHand = botTurn.players.find((player) => player.id === bot.id)?.handCount;
     const initialDrawPile = botTurn.game?.drawPileCount;
     const initialDiscard = botTurn.game?.topDiscard.id;
-    const startedAt = Date.now();
-
     await snapshotFrom(
       connection.inbox,
       (snapshot) =>
@@ -170,10 +168,8 @@ describe("RoomDO integration", () => {
         snapshot.players.find((player) => player.id === bot.id)?.handCount !== initialBotHand ||
         snapshot.game?.drawPileCount !== initialDrawPile ||
         snapshot.game?.topDiscard.id !== initialDiscard,
-      5_000,
+      7_000,
     );
-
-    expect(Date.now() - startedAt).toBeLessThan(4_000);
   });
 
   it("transfers host control when the host leaves an active game", async () => {
@@ -202,6 +198,47 @@ describe("RoomDO integration", () => {
 
     expect(transferred.players.find((player) => player.id === host.playerId)?.isBot).toBe(true);
     expect(transferred.players.find((player) => player.id === guest.playerId)?.isBot).toBe(false);
+
+    const stub = env.ROOMS.getByName(host.roomCode);
+    await expect(
+      runInDurableObject(stub, (instance) => (instance as unknown as RoomInstanceHarness).room),
+    ).resolves.not.toBeNull();
+
+    guestConnection.socket.send(JSON.stringify({ type: "room.leave" }));
+    await waitForRoomDeletion(stub);
+    expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
+  });
+
+  it("deletes a lobby when its last human leaves bots behind", async () => {
+    const host = await createRoom("单人房主");
+    const connection = await connect(host);
+    connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "easy" }));
+    await snapshotFrom(
+      connection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
+
+    connection.socket.send(JSON.stringify({ type: "room.leave" }));
+    const stub = env.ROOMS.getByName(host.roomCode);
+    await waitForRoomDeletion(stub);
+    expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
+  });
+
+  it("deletes an active mixed room when its only human leaves", async () => {
+    const host = await createRoom("单人玩家");
+    const connection = await connect(host);
+    connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "medium" }));
+    await snapshotFrom(
+      connection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
+    connection.socket.send(JSON.stringify({ type: "lobby.start" }));
+    await snapshotFrom(connection.inbox, (snapshot) => snapshot.phase === "playing");
+
+    connection.socket.send(JSON.stringify({ type: "room.leave" }));
+    const stub = env.ROOMS.getByName(host.roomCode);
+    await waitForRoomDeletion(stub);
+    expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
   });
 
   it("survives hibernation and completes the disconnect, reconnect, and rematch lifecycle", async () => {
@@ -470,4 +507,13 @@ async function waitForCondition(predicate: () => Promise<boolean>, timeoutMs = 2
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   throw new Error("Timed out waiting for condition");
+}
+
+async function waitForRoomDeletion(stub: DurableObjectStub): Promise<void> {
+  await waitForCondition(() =>
+    runInDurableObject(
+      stub,
+      (instance) => (instance as unknown as RoomInstanceHarness).room === null,
+    ),
+  );
 }
