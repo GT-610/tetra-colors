@@ -440,6 +440,7 @@ export class RoomDO extends DurableObject<Env> {
       player.controlledByBot = true;
       player.difficulty = "medium";
       player.disconnectedAt = null;
+      this.reassignHost();
       this.scheduleBotIfNeeded();
       await this.persistAndBroadcast([{ type: "player-became-bot", playerId }]);
     }
@@ -614,8 +615,14 @@ export class RoomDO extends DurableObject<Env> {
   }
 
   private reassignHost(): void {
-    if (!this.room || this.room.players.some((player) => player.id === this.room?.hostId)) return;
-    this.room.hostId = this.room.players[0]?.id ?? "";
+    if (!this.room) return;
+    const currentHost = this.room.players.find((player) => player.id === this.room?.hostId);
+    if (currentHost && !isBotControlled(currentHost)) return;
+
+    const connectedHuman = this.room.players.find(
+      (player) => player.kind === "human" && player.connected && !player.controlledByBot,
+    );
+    this.room.hostId = connectedHuman?.id ?? currentHost?.id ?? this.room.players[0]?.id ?? "";
   }
 
   private consumeAction(playerId: string): boolean {

@@ -170,6 +170,59 @@ describe("game rules", () => {
     }
   });
 
+  it("applies a draw penalty before finishing the game", () => {
+    const drawTwo: Card = { id: "winning-draw-two", kind: "draw-two", color: "coral" };
+    const state = testState({
+      players: [
+        { id: "a", hand: [drawTwo] },
+        { id: "b", hand: [numberCard("b-card", "azure", 2)] },
+      ],
+      drawPile: [numberCard("draw-1", "teal", 5), numberCard("draw-2", "azure", 6)],
+      discardPile: [numberCard("top", "coral", 3)],
+      currentColor: "coral",
+    });
+
+    const result = applyGameAction(
+      state,
+      "a",
+      { type: "play-card", cardId: drawTwo.id },
+      seededRandom(2),
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.state.phase).toBe("finished");
+      expect(result.state.winnerId).toBe("a");
+      expect(result.state.players[1]?.hand).toHaveLength(3);
+      expect(result.events.map((event) => event.type)).toEqual([
+        "card-played",
+        "cards-drawn",
+        "game-finished",
+      ]);
+    }
+  });
+
+  it("rejects a color choice for a non-wild card", () => {
+    const playable = numberCard("playable", "coral", 8);
+    const state = testState({
+      players: [
+        { id: "a", hand: [playable, numberCard("keep", "teal", 1)] },
+        { id: "b", hand: [numberCard("b-card", "azure", 2)] },
+      ],
+      discardPile: [numberCard("top", "coral", 3)],
+      currentColor: "coral",
+    });
+
+    expect(
+      applyGameAction(
+        state,
+        "a",
+        { type: "play-card", cardId: playable.id, chosenColor: "teal" },
+        seededRandom(2),
+      ),
+    ).toEqual({ ok: false, error: "color_not_allowed" });
+  });
+
   it("makes reverse act as a skip with two players", () => {
     const reverse: Card = { id: "reverse", kind: "reverse", color: "coral" };
     const state = testState({

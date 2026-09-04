@@ -162,6 +162,34 @@ describe("RoomDO integration", () => {
     expect(Date.now() - startedAt).toBeLessThan(4_000);
   });
 
+  it("transfers host control when the host leaves an active game", async () => {
+    const host = await createRoom("原房主");
+    const guest = await joinRoom(host.roomCode, "新房主");
+    const hostConnection = await connect(host);
+    const guestConnection = await connect(guest);
+
+    await snapshotFrom(
+      hostConnection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
+    await snapshotFrom(
+      guestConnection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
+
+    hostConnection.socket.send(JSON.stringify({ type: "lobby.start" }));
+    await snapshotFrom(guestConnection.inbox, (snapshot) => snapshot.phase === "playing");
+
+    hostConnection.socket.send(JSON.stringify({ type: "room.leave" }));
+    const transferred = await snapshotFrom(
+      guestConnection.inbox,
+      (snapshot) => snapshot.phase === "playing" && snapshot.hostId === guest.playerId,
+    );
+
+    expect(transferred.players.find((player) => player.id === host.playerId)?.isBot).toBe(true);
+    expect(transferred.players.find((player) => player.id === guest.playerId)?.isBot).toBe(false);
+  });
+
   it("survives hibernation and completes the disconnect, reconnect, and rematch lifecycle", async () => {
     const host = await createRoom("生命周期测试");
     const connection = await connect(host);

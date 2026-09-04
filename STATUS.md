@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Post-delivery optimization — Batch 1 of 4 completed
+Post-delivery optimization — Batch 2 of 4 completed
 
 ## Completed
 
@@ -106,10 +106,13 @@ Post-delivery optimization — Batch 1 of 4 completed
   message. State invariant validation now lives in the test suite, heartbeats no longer send full
   snapshots, and new connections no longer receive duplicate snapshots. Type checking, linting, all
   24 tests, and whitespace validation pass after the cleanup.
+- Applied draw penalties before declaring a winner, rejected color choices attached to non-wild
+  cards, and transferred host control to a connected human when the prior host leaves or becomes
+  bot-controlled. Focused rule and real Durable Object regressions increased the suite to 27 passing
+  tests.
 
 ## Remaining
 
-- Correct the audited rule and host-lifecycle edge cases.
 - Harden WebSocket authentication, JSON body limits, and HTTP rate-limit storage.
 - Reduce client game-table rerenders and strengthen stored-session validation.
 - Run final quality gates and live WebSocket smoke testing, then publish the pull request.
@@ -117,6 +120,4 @@ Post-delivery optimization — Batch 1 of 4 completed
 ## Known issues
 
 - A custom domain is intentionally not configured; the project owner will bind it later.
-- A final draw-penalty card currently ends the game before applying its penalty.
-- A host converted to bot control can leave connected players without a human host.
 - WebSocket session tokens currently appear in request URLs.

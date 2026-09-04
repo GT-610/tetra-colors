@@ -167,7 +167,7 @@ function playCard(
   if (isWild && chosenColor === undefined) {
     return { ok: false, error: "color_required" };
   }
-  if (chosenColor !== undefined && !isCardColor(chosenColor)) {
+  if (chosenColor !== undefined && (!isWild || !isCardColor(chosenColor))) {
     return { ok: false, error: "color_not_allowed" };
   }
 
@@ -190,25 +190,6 @@ function playCard(
     },
   ];
 
-  if (nextPlayer.hand.length === 0) {
-    nextState.phase = "finished";
-    nextState.winnerId = nextPlayer.id;
-    events.push({ type: "game-finished", winnerId: nextPlayer.id });
-    return { ok: true, state: nextState, events };
-  }
-
-  if (card.kind === "reverse") {
-    nextState.direction = nextState.direction === 1 ? -1 : 1;
-    const steps = nextState.players.length === 2 ? 2 : 1;
-    moveTurn(nextState, steps, events);
-    return { ok: true, state: nextState, events };
-  }
-
-  if (card.kind === "skip") {
-    moveTurn(nextState, 2, events);
-    return { ok: true, state: nextState, events };
-  }
-
   if (card.kind === "draw-two" || card.kind === "wild-draw-four") {
     const penalty = card.kind === "draw-two" ? 2 : 4;
     const penalizedIndex = advanceIndex(
@@ -226,12 +207,38 @@ function playCard(
       playerId: penalizedPlayer.id,
       count: drawn,
     });
+    if (nextPlayer.hand.length === 0) {
+      return finishGame(nextState, nextPlayer.id, events);
+    }
+    moveTurn(nextState, 2, events);
+    return { ok: true, state: nextState, events };
+  }
+
+  if (nextPlayer.hand.length === 0) {
+    return finishGame(nextState, nextPlayer.id, events);
+  }
+
+  if (card.kind === "reverse") {
+    nextState.direction = nextState.direction === 1 ? -1 : 1;
+    const steps = nextState.players.length === 2 ? 2 : 1;
+    moveTurn(nextState, steps, events);
+    return { ok: true, state: nextState, events };
+  }
+
+  if (card.kind === "skip") {
     moveTurn(nextState, 2, events);
     return { ok: true, state: nextState, events };
   }
 
   moveTurn(nextState, 1, events);
   return { ok: true, state: nextState, events };
+}
+
+function finishGame(state: GameState, winnerId: string, events: GameEvent[]): GameResult {
+  state.phase = "finished";
+  state.winnerId = winnerId;
+  events.push({ type: "game-finished", winnerId });
+  return { ok: true, state, events };
 }
 
 function drawCard(state: GameState, currentPlayer: GamePlayer, random: RandomSource): GameResult {
