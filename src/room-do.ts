@@ -39,7 +39,6 @@ interface RoomData {
   hostId: string;
   players: RoomPlayer[];
   game: GameState | null;
-  round: number;
   lastActivity: number;
   turnDeadline: number | null;
   scheduledBotAt: number | null;
@@ -121,7 +120,6 @@ export class RoomDO extends DurableObject<Env> {
     }
 
     if (parsed.type === "heartbeat") {
-      this.sendSnapshot(socket, attachment.playerId);
       return;
     }
 
@@ -215,7 +213,6 @@ export class RoomDO extends DurableObject<Env> {
       hostId: session.player.id,
       players: [session.player],
       game: null,
-      round: 0,
       lastActivity: now,
       turnDeadline: null,
       scheduledBotAt: null,
@@ -316,17 +313,6 @@ export class RoomDO extends DurableObject<Env> {
       wasAway ? [{ type: "player-reconnected", playerId: player.id }] : [],
     );
 
-    this.send(
-      socketMessage({
-        type: "welcome",
-        playerId: player.id,
-        playerToken: rawToken,
-        roomCode: this.room.code,
-      }),
-      server,
-    );
-    this.sendSnapshot(server, player.id);
-
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -402,7 +388,6 @@ export class RoomDO extends DurableObject<Env> {
       runtimeRandom,
     );
     this.room.phase = "playing";
-    this.room.round += 1;
     this.room.turnDeadline = Date.now() + TURN_DURATION_MS;
     this.scheduleBotIfNeeded();
     await this.persistAndBroadcast([]);
@@ -792,7 +777,6 @@ export class RoomDO extends DurableObject<Env> {
                   : [],
               drawnCardId: currentPlayer.id === playerId ? game.drawnCardId : null,
               winnerId: game.winnerId,
-              config: game.config,
             }
           : null,
     };
@@ -897,7 +881,6 @@ function toRoomEvents(events: readonly GameEvent[]): RoomEvent[] {
         type: "card-played",
         playerId: event.playerId,
         card: event.card,
-        chosenColor: event.chosenColor,
       });
     } else if (event.type === "cards-drawn") {
       mapped.push({ type: "cards-drawn", playerId: event.playerId, count: event.count });

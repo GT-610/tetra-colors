@@ -377,7 +377,6 @@ async function connect(session: RoomSessionResponse) {
   const inbox = new MessageInbox(socket);
   sockets.push(socket);
   socket.accept();
-  await inbox.waitFor((message) => message.type === "welcome");
   return { socket, inbox };
 }
 

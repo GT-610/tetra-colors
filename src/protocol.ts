@@ -1,5 +1,5 @@
 import { isCardColor } from "./logic/deck";
-import type { BotDifficulty, Card, CardColor, GameConfig, TurnDirection } from "./logic/types";
+import type { BotDifficulty, Card, CardColor, TurnDirection } from "./logic/types";
 
 export const MAX_NICKNAME_LENGTH = 20;
 export const ROOM_CODE_LENGTH = 5;
@@ -26,7 +26,6 @@ export interface PublicGameView {
   playableCardIds: string[];
   drawnCardId: string | null;
   winnerId: string | null;
-  config: GameConfig;
 }
 
 export interface RoomSnapshot {
@@ -55,13 +54,12 @@ export type RoomEvent =
   | { type: "player-left"; playerId: string }
   | { type: "player-reconnected"; playerId: string }
   | { type: "player-became-bot"; playerId: string }
-  | { type: "card-played"; playerId: string; card: Card; chosenColor: CardColor }
+  | { type: "card-played"; playerId: string; card: Card }
   | { type: "cards-drawn"; playerId: string; count: number }
   | { type: "turn-timed-out"; playerId: string }
   | { type: "game-finished"; winnerId: string };
 
 export type ServerMessage =
-  | { type: "welcome"; playerId: string; playerToken: string; roomCode: string }
   | { type: "snapshot"; snapshot: RoomSnapshot }
   | { type: "event"; event: RoomEvent }
   | { type: "error"; code: ServerErrorCode; message: string };
@@ -77,15 +75,6 @@ export type ServerErrorCode =
   | "invalid_action"
   | "session_expired"
   | "internal_error";
-
-export interface CreateRoomRequest {
-  nickname: string;
-}
-
-export interface JoinRoomRequest {
-  nickname: string;
-  playerToken?: string;
-}
 
 export interface RoomSessionResponse {
   roomCode: string;

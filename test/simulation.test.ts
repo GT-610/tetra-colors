@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BotDifficulty, GameState, RandomSource } from "../src/logic";
-import { applyGameAction, chooseBotAction, startGame, validateGameState } from "../src/logic";
+import { applyGameAction, chooseBotAction, startGame } from "../src/logic";
+import { validateGameState } from "./helpers/game-state";
 
 describe("headless bot simulation", () => {
   it("finishes 120 games without deadlocks or invalid states", () => {

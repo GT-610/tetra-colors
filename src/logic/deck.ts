@@ -12,8 +12,6 @@ import { CARD_COLORS } from "./types";
 const NUMBER_VALUES: NumberCardValue[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 const ACTION_KINDS: ColoredActionCard["kind"][] = ["skip", "reverse", "draw-two"];
 
-export const DECK_SIZE = 108;
-
 export function createDeck(): Card[] {
   const cards: Card[] = [];
 

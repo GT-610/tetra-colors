@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 6 — Completed (workers.dev delivery)
+Post-delivery optimization — Batch 1 of 4 completed
 
 ## Completed
 
@@ -98,11 +98,25 @@ Phase 6 — Completed (workers.dev delivery)
   three `TRY52` sessions passed post-deploy reload checks with empty browser consoles.
 - Completed the current delivery scope on workers.dev after the project owner chose to defer custom
   domain binding and handle it separately later.
+- Audited production, client, protocol, test, dependency, and style usage on the synchronized `main`
+  baseline. Strict unused checks and CSS reference checks passed, and the official npm advisory
+  service reported no vulnerabilities.
+- Removed unused request types, persisted round metadata, public game configuration, event fields,
+  the test-only production state validator and deck-size export, and the unconsumed WebSocket welcome
+  message. State invariant validation now lives in the test suite, heartbeats no longer send full
+  snapshots, and new connections no longer receive duplicate snapshots. Type checking, linting, all
+  24 tests, and whitespace validation pass after the cleanup.
 
 ## Remaining
 
-- None for the current scope.
+- Correct the audited rule and host-lifecycle edge cases.
+- Harden WebSocket authentication, JSON body limits, and HTTP rate-limit storage.
+- Reduce client game-table rerenders and strengthen stored-session validation.
+- Run final quality gates and live WebSocket smoke testing, then publish the pull request.
 
 ## Known issues
 
 - A custom domain is intentionally not configured; the project owner will bind it later.
+- A final draw-penalty card currently ends the game before applying its penalty.
+- A host converted to bot control can leave connected players without a human host.
+- WebSocket session tokens currently appear in request URLs.

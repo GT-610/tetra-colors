@@ -134,7 +134,6 @@ async function connect(session: RoomSessionResponse) {
     socket.once("open", resolve);
     socket.once("error", reject);
   });
-  await inbox.waitFor((message) => message.type === "welcome");
   return { socket, inbox };
 }
 

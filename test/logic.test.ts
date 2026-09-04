@@ -6,19 +6,20 @@ import {
   CARD_COLORS,
   canPlayCard,
   createDeck,
-  DECK_SIZE,
   getPlayableCards,
   shuffleCards,
   startGame,
-  validateGameState,
 } from "../src/logic";
+import { validateGameState } from "./helpers/game-state";
+
+const EXPECTED_DECK_SIZE = 108;
 
 describe("deck", () => {
   it("builds a complete deck with unique identifiers", () => {
     const deck = createDeck();
 
-    expect(deck).toHaveLength(DECK_SIZE);
-    expect(new Set(deck.map((card) => card.id)).size).toBe(DECK_SIZE);
+    expect(deck).toHaveLength(EXPECTED_DECK_SIZE);
+    expect(new Set(deck.map((card) => card.id)).size).toBe(EXPECTED_DECK_SIZE);
     expect(deck.filter((card) => card.kind === "wild")).toHaveLength(4);
     expect(deck.filter((card) => card.kind === "wild-draw-four")).toHaveLength(4);
 
@@ -212,7 +213,6 @@ describe("game rules", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.state.discardPile.map((card) => card.id)).toEqual(["top"]);
-      expect(result.events).toContainEqual({ type: "discard-recycled", count: 2 });
       expect(result.state.players[0]?.hand).toHaveLength(2);
     }
   });

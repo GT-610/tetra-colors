@@ -15,7 +15,7 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 
 export type ConnectionState = "idle" | "connecting" | "connected" | "reconnecting" | "disconnected";
 
-export interface RoomClient {
+interface RoomClient {
   session: RoomSessionResponse | null;
   snapshot: RoomSnapshot | null;
   connectionState: ConnectionState;
