@@ -9,6 +9,7 @@ import type {
 } from "../../src/protocol";
 import { isRoomSessionResponse } from "../../src/protocol";
 import { copy } from "./copy";
+import { createRoomTransition, type RoomTransition } from "./game-transition";
 
 const SESSION_KEY = "tetra-colors.session";
 const HEARTBEAT_MS = 15_000;
@@ -23,10 +24,12 @@ interface RoomClient {
   connectionState: ConnectionState;
   error: string | null;
   latestEvent: RoomEvent | null;
+  transition: RoomTransition | null;
   busy: boolean;
   createRoom: (nickname: string) => Promise<void>;
   joinRoom: (nickname: string, roomCode: string) => Promise<void>;
   send: (message: ClientMessage) => boolean;
+  completeTransition: () => void;
   leave: () => void;
   clearError: () => void;
 }
@@ -39,17 +42,54 @@ export function useRoomClient(): RoomClient {
   );
   const [error, setError] = useState<string | null>(null);
   const [latestEvent, setLatestEvent] = useState<RoomEvent | null>(null);
+  const [transition, setTransition] = useState<RoomTransition | null>(null);
   const [busy, setBusy] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectAllowedRef = useRef(true);
+  const snapshotRef = useRef<RoomSnapshot | null>(null);
+  const transitionRef = useRef<RoomTransition | null>(null);
+  const eventBufferRef = useRef<RoomEvent[]>([]);
+  const pendingSnapshotsRef = useRef<Array<{ snapshot: RoomSnapshot; events: RoomEvent[] }>>([]);
+
+  const commitSnapshot = useCallback((nextSnapshot: RoomSnapshot | null) => {
+    snapshotRef.current = nextSnapshot;
+    setSnapshot(nextSnapshot);
+  }, []);
+
+  const drainSnapshots = useCallback(() => {
+    while (!transitionRef.current) {
+      const pending = pendingSnapshotsRef.current.shift();
+      if (!pending) return;
+
+      const previous = snapshotRef.current;
+      const nextTransition = previous
+        ? createRoomTransition(previous, pending.snapshot, pending.events)
+        : null;
+      if (nextTransition) {
+        transitionRef.current = nextTransition;
+        setTransition(nextTransition);
+        return;
+      }
+
+      commitSnapshot(pending.snapshot);
+    }
+  }, [commitSnapshot]);
+
+  const resetSnapshots = useCallback(() => {
+    eventBufferRef.current = [];
+    pendingSnapshotsRef.current = [];
+    transitionRef.current = null;
+    setTransition(null);
+    commitSnapshot(null);
+  }, [commitSnapshot]);
 
   const invalidateSession = useCallback(() => {
     reconnectAllowedRef.current = false;
     clearStoredSession();
     setSession(null);
-    setSnapshot(null);
+    resetSnapshots();
     setLatestEvent(null);
-  }, []);
+  }, [resetSnapshots]);
 
   useEffect(() => {
     if (!session) {
@@ -94,8 +134,13 @@ export function useRoomClient(): RoomClient {
         }
 
         if (message.type === "snapshot") {
-          setSnapshot(message.snapshot);
+          pendingSnapshotsRef.current.push({
+            snapshot: message.snapshot,
+            events: eventBufferRef.current.splice(0),
+          });
+          drainSnapshots();
         } else if (message.type === "event") {
+          eventBufferRef.current.push(message.event);
           if (eventTimer !== undefined) window.clearTimeout(eventTimer);
           setLatestEvent(message.event);
           eventTimer = window.setTimeout(() => setLatestEvent(null), EVENT_DISPLAY_MS);
@@ -110,6 +155,7 @@ export function useRoomClient(): RoomClient {
 
       socket.addEventListener("close", () => {
         if (heartbeatTimer !== undefined) window.clearInterval(heartbeatTimer);
+        eventBufferRef.current = [];
         if (disposed || !reconnectAllowedRef.current) return;
         reconnectAttempts += 1;
         if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
@@ -136,15 +182,18 @@ export function useRoomClient(): RoomClient {
       socketRef.current?.close(1000, "Client navigation");
       socketRef.current = null;
     };
-  }, [session, invalidateSession]);
+  }, [session, invalidateSession, drainSnapshots]);
 
-  const activateSession = useCallback((nextSession: RoomSessionResponse) => {
-    storeSession(nextSession);
-    setSnapshot(null);
-    setLatestEvent(null);
-    setError(null);
-    setSession(nextSession);
-  }, []);
+  const activateSession = useCallback(
+    (nextSession: RoomSessionResponse) => {
+      storeSession(nextSession);
+      resetSnapshots();
+      setLatestEvent(null);
+      setError(null);
+      setSession(nextSession);
+    },
+    [resetSnapshots],
+  );
 
   const createRoom = useCallback(
     async (nickname: string) => {
@@ -195,6 +244,15 @@ export function useRoomClient(): RoomClient {
     return true;
   }, []);
 
+  const completeTransition = useCallback(() => {
+    const current = transitionRef.current;
+    if (!current) return;
+    transitionRef.current = null;
+    setTransition(null);
+    commitSnapshot(current.next);
+    drainSnapshots();
+  }, [commitSnapshot, drainSnapshots]);
+
   const leave = useCallback(() => {
     reconnectAllowedRef.current = false;
     const socket = socketRef.current;
@@ -204,10 +262,10 @@ export function useRoomClient(): RoomClient {
     socket?.close(1000, "Left room");
     clearStoredSession();
     setSession(null);
-    setSnapshot(null);
+    resetSnapshots();
     setLatestEvent(null);
     setError(null);
-  }, []);
+  }, [resetSnapshots]);
 
   return {
     session,
@@ -215,10 +273,12 @@ export function useRoomClient(): RoomClient {
     connectionState,
     error,
     latestEvent,
+    transition,
     busy,
     createRoom,
     joinRoom,
     send,
+    completeTransition,
     leave,
     clearError: () => setError(null),
   };

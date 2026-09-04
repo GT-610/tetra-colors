@@ -53,6 +53,17 @@ button:disabled {
   cursor: not-allowed;
 }
 
+input[aria-invalid="true"] {
+  border-color: var(--coral);
+  box-shadow: 0 0 0 3px rgb(251 75 107 / 16%);
+}
+
+.field-error {
+  color: #fda4b4;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
 .app-shell {
   min-height: 100dvh;
   padding: 20px;
@@ -708,6 +719,22 @@ h2 {
   background: color-mix(in srgb, var(--table-accent) 11%, #111726);
 }
 
+.opponent-chip.is-skipped,
+.opponent-chip.skip-clearing {
+  border-color: rgb(251 75 107 / 45%);
+  filter: saturate(0.45) brightness(0.72);
+}
+
+.opponent-chip.skip-applying {
+  animation: skip-player-apply 360ms ease-out both;
+  animation-delay: var(--skip-delay);
+}
+
+.opponent-chip.skip-clearing {
+  animation: skip-player-clear 360ms ease-out both;
+  animation-delay: var(--skip-delay);
+}
+
 .opponent-symbol,
 .result-shape,
 .color-option > span,
@@ -929,11 +956,108 @@ h2 {
   z-index: 3;
   top: var(--flight-from-y);
   left: var(--flight-from-x);
+  opacity: 0;
   pointer-events: none;
   animation: card-flight var(--flight-duration) cubic-bezier(0.22, 0.78, 0.25, 1) forwards;
+  animation-delay: var(--flight-delay);
+  animation-fill-mode: both;
   transform: translate(-50%, -50%) scale(var(--flight-from-scale)) rotate(-5deg);
   transform-origin: center;
   will-change: top, left, opacity, transform;
+}
+
+.deal-flight {
+  position: absolute;
+  z-index: 3;
+  top: var(--deal-from-y);
+  left: var(--deal-from-x);
+  width: var(--deal-width);
+  opacity: 0;
+  pointer-events: none;
+  animation: deal-flight-opponent var(--deal-duration) cubic-bezier(0.22, 0.78, 0.25, 1) both;
+  animation-delay: var(--deal-delay);
+  transform: translate(-50%, -50%) scale(0.96) rotate(-4deg);
+  transform-origin: center;
+  will-change: top, left, opacity, transform;
+}
+
+.deal-flight-self {
+  z-index: 7;
+  animation-name: deal-flight-self;
+}
+
+.deal-card {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 0.68;
+  transform-style: preserve-3d;
+}
+
+.deal-card-reveal {
+  animation: deal-card-reveal var(--deal-reveal-duration) ease-in-out both;
+  animation-delay: var(--deal-reveal-delay);
+}
+
+.deal-card-side {
+  position: absolute;
+  inset: 0;
+  display: block;
+  backface-visibility: hidden;
+}
+
+.deal-card-side > .card-face {
+  width: 100%;
+  height: 100%;
+}
+
+.deal-card-front {
+  transform: rotateY(180deg);
+}
+
+@keyframes deal-flight-opponent {
+  0% {
+    opacity: 0;
+  }
+
+  8%,
+  82% {
+    opacity: 1;
+  }
+
+  to {
+    top: var(--deal-to-y);
+    left: var(--deal-to-x);
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5) rotate(6deg);
+  }
+}
+
+@keyframes deal-flight-self {
+  0% {
+    opacity: 0;
+  }
+
+  8% {
+    opacity: 1;
+  }
+
+  to {
+    top: var(--deal-to-y);
+    left: var(--deal-to-x);
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.86) rotate(0deg);
+  }
+}
+
+@keyframes deal-card-reveal {
+  from {
+    transform: rotateY(0deg);
+  }
+
+  to {
+    transform: rotateY(180deg);
+  }
 }
 
 .card-flight-self {
@@ -959,6 +1083,103 @@ h2 {
     left: var(--flight-to-x);
     opacity: 0;
     transform: translate(-50%, -50%) scale(1) rotate(3deg);
+  }
+}
+
+.skip-badge {
+  position: absolute;
+  z-index: 8;
+  top: -11px;
+  right: -11px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 2px solid #fecdd6;
+  border-radius: 50%;
+  background: #9f1239;
+  box-shadow: 0 7px 20px rgb(159 18 57 / 48%);
+}
+
+.skip-badge > span {
+  width: 18px;
+  height: 3px;
+  border-radius: 99px;
+  background: #fff1f2;
+  transform: rotate(-42deg);
+}
+
+.skip-applying .skip-badge {
+  animation: skip-badge-apply 360ms cubic-bezier(0.18, 0.86, 0.32, 1.2) both;
+  animation-delay: var(--skip-delay);
+}
+
+.skip-clearing .skip-badge {
+  animation: skip-badge-clear 360ms ease-in both;
+  animation-delay: var(--skip-delay);
+}
+
+.hand-zone.is-skipped,
+.hand-zone.skip-clearing {
+  filter: saturate(0.55) brightness(0.78);
+}
+
+.hand-zone.skip-applying {
+  animation: skip-player-apply 360ms ease-out both;
+  animation-delay: var(--skip-delay);
+}
+
+.hand-zone.skip-clearing {
+  animation: skip-player-clear 360ms ease-out both;
+  animation-delay: var(--skip-delay);
+}
+
+.hand-zone > .skip-badge {
+  top: 10px;
+  right: 14px;
+}
+
+@keyframes skip-player-apply {
+  from {
+    filter: saturate(1) brightness(1);
+  }
+
+  to {
+    filter: saturate(0.45) brightness(0.72);
+  }
+}
+
+@keyframes skip-player-clear {
+  from {
+    filter: saturate(0.45) brightness(0.72);
+  }
+
+  to {
+    filter: saturate(1) brightness(1);
+  }
+}
+
+@keyframes skip-badge-apply {
+  from {
+    opacity: 0;
+    transform: scale(1.8) rotate(-24deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes skip-badge-clear {
+  from {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.55) rotate(18deg);
   }
 }
 
@@ -1176,6 +1397,12 @@ h2 {
   scrollbar-width: none;
 }
 
+.hand-end-target {
+  width: 1px;
+  flex: 0 0 1px;
+  align-self: stretch;
+}
+
 .hand-card {
   flex: 0 0 auto;
   scroll-snap-align: center;
@@ -1209,6 +1436,10 @@ h2 {
 
 .hand-card.drawn-card .card-face {
   animation: drawn-pop 300ms ease-out;
+}
+
+.hand-card.card-origin-hidden {
+  opacity: 0;
 }
 
 @keyframes drawn-pop {

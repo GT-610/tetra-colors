@@ -4,6 +4,7 @@ export const copy = {
   intro: "用颜色、数字与时机，和朋友完成一场轻快的牌局。",
   nicknameLabel: "你的昵称",
   nicknamePlaceholder: "例如：青鸟",
+  nicknameRequired: "请先输入昵称，再加入房间。",
   roomCodeLabel: "房间码",
   roomCodePlaceholder: "5 位房间码",
   createRoom: "创建新房间",
@@ -58,6 +59,9 @@ export const copy = {
   waitingRematch: "等待房主开启下一局",
   directionClockwise: "顺向",
   directionCounterClockwise: "逆向",
+  skipped: "本回合被跳过",
+  skipCleared: "已解除跳过状态",
+  skippedStatus: "本回合不可行动",
   cardKinds: {
     skip: "跳过",
     reverse: "反向",

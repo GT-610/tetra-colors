@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { BotDifficulty, CardColor } from "../../src/logic";
 import {
@@ -79,7 +79,9 @@ export function App() {
       connectionState={room.connectionState}
       error={room.error}
       latestEvent={room.latestEvent}
+      transition={room.transition}
       onSend={room.send}
+      onTransitionComplete={room.completeTransition}
       onLeave={leave}
     />
   );
@@ -96,6 +98,8 @@ interface WelcomeScreenProps {
 function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeScreenProps) {
   const [nickname, setNickname] = useState("");
   const [roomCode, setRoomCode] = useState("");
+  const [nicknameMissing, setNicknameMissing] = useState(false);
+  const nicknameRef = useRef<HTMLInputElement | null>(null);
   const normalizedNickname = nickname.trim();
   const normalizedRoomCode = normalizeRoomCode(roomCode);
   const nicknameValid =
@@ -127,15 +131,24 @@ function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeS
         <label className="field">
           <span>{copy.nicknameLabel}</span>
           <input
+            ref={nicknameRef}
             autoComplete="nickname"
+            aria-describedby={nicknameMissing ? "nickname-required" : undefined}
+            aria-invalid={nicknameMissing}
             maxLength={MAX_NICKNAME_LENGTH}
             placeholder={copy.nicknamePlaceholder}
             value={nickname}
             onChange={(event) => {
               setNickname(event.target.value);
+              setNicknameMissing(false);
               onClearError();
             }}
           />
+          {nicknameMissing ? (
+            <span className="field-error" id="nickname-required" role="alert">
+              {copy.nicknameRequired}
+            </span>
+          ) : null}
         </label>
 
         <button
@@ -172,6 +185,11 @@ function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeS
           type="button"
           disabled={!canAttemptJoin(normalizedRoomCode, busy)}
           onClick={() => {
+            if (!nicknameValid) {
+              setNicknameMissing(true);
+              nicknameRef.current?.focus();
+              return;
+            }
             if (normalizedRoomCode) void onJoin(normalizedNickname, normalizedRoomCode);
           }}
         >

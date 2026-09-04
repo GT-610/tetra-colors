@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Post-delivery interaction refinement — In progress
+Post-delivery interaction refinement — Verified, pull request pending
 
 ## Completed
 
@@ -160,12 +160,23 @@ Post-delivery interaction refinement — In progress
   Skip cards now retain the skipped player in game state until the following acting player completes
   an action, with paired skip/unskip events for consecutive skips. The shared half-flight deal
   timing, state invariants, protocol views, and RoomDO behavior are covered by 51 passing tests.
+- Buffered ordered room events with their authoritative snapshots so the client keeps the previous
+  turn visible and disables actions until each animation completes. Played cards now fly from the
+  acting seat, drawn cards leave the top of the pile one by one, self draws flip independently at
+  the right edge of the hand, opponent draws stay face-down, and skip markers animate on and off.
+  A valid room code also enables joining before nickname validation; an empty nickname now shows an
+  inline alert, marks the field invalid, and focuses it. Twelve test files now contain 56 passing
+  tests.
+- Verified the synchronized client locally at 390 × 844 and 1920 × 960 with no page overflow. The
+  full-width turn bar, equal-sized status and countdown text, stage/hand stacking, snapshot freeze,
+  disabled controls, self draw reveal, played-card flight, and delayed state commit all matched the
+  intended behavior. The browser console contained no warnings or errors. The independent local
+  WebSocket smoke test also passed in room `V589B` with two connections, three seats, and hidden-hand
+  isolation verified.
 
 ## Remaining
 
-- Add synchronized client draw/deal, card-reveal, and skip-status animations while freezing the
-  rendered snapshot until each transition completes.
-- Complete desktop and mobile browser regression, then open the interaction-refinement pull request.
+- Open the interaction-refinement pull request and complete external review and merge.
 
 ## Known issues
 
