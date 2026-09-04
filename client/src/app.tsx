@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { BotDifficulty, CardColor } from "../../src/logic";
 import {
@@ -18,6 +18,7 @@ const SHAPE_CLASSES: Record<CardColor, string> = {
   azure: "shape-diamond",
 };
 const EMPTY_SEAT_IDS = ["empty-one", "empty-two", "empty-three", "empty-four", "empty-five"];
+const PLAYER_COLORS = ["teal", "azure", "amber", "coral"] as const satisfies readonly CardColor[];
 
 export function App() {
   const room = useRoomClient();
@@ -68,7 +69,6 @@ export function App() {
 
   return (
     <GameTable
-      key={`${room.snapshot.game?.turnNumber}:${room.snapshot.game?.topDiscard.id}:${room.snapshot.hand.length}:${room.snapshot.game?.drawnCardId ?? ""}`}
       snapshot={room.snapshot}
       connectionState={room.connectionState}
       error={room.error}
@@ -196,15 +196,21 @@ function LobbyScreen({ snapshot, connectionState, error, onSend, onLeave }: Lobb
   const isHost = snapshot.selfId === snapshot.hostId;
   const canStart = snapshot.players.length >= 2;
 
-  const subtitle = useMemo(
-    () => `${snapshot.players.length} / 6 ${copy.seats}`,
-    [snapshot.players.length],
-  );
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1_500);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
+  const subtitle = `${snapshot.players.length} / 6 ${copy.seats}`;
 
   const copyRoomCode = async () => {
-    await navigator.clipboard.writeText(snapshot.roomCode);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1_500);
+    try {
+      await navigator.clipboard.writeText(snapshot.roomCode);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
   };
 
   return (
@@ -363,5 +369,5 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
 }
 
 function colorForIndex(index: number): CardColor {
-  return (["teal", "azure", "amber", "coral"] as const)[index % 4] ?? "teal";
+  return PLAYER_COLORS[index % PLAYER_COLORS.length] ?? "teal";
 }

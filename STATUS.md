@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Post-delivery optimization — Batch 3 of 4 completed
+Post-delivery optimization — Batch 4 of 4 completed
 
 ## Completed
 
@@ -115,10 +115,15 @@ Post-delivery optimization — Batch 3 of 4 completed
   streaming byte limit. Replaced the unbounded HTTP rate-limit map with a constant-time bounded
   limiter. Six test files now contain 32 passing tests, including handshake, malformed/oversized
   body, protocol, limiter-window, and limiter-capacity coverage.
+- Isolated the 250 ms turn-clock refresh to the timer component instead of rerendering the full game
+  table, replaced repeated playable-card scans with a set lookup, and removed snapshot-driven forced
+  component remounts and a trivial lobby memo. Snapshot effects now clear pending actions safely,
+  clipboard feedback timers clean up on unmount, storage failures no longer prevent active play, and
+  persisted sessions use the shared validated contract. Six test files and 33 tests pass after the
+  client cleanup.
 
 ## Remaining
 
-- Reduce client game-table rerenders and strengthen stored-session validation.
 - Run final quality gates and live WebSocket smoke testing, then publish the pull request.
 
 ## Known issues

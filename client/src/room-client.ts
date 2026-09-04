@@ -7,7 +7,7 @@ import type {
   RoomSnapshot,
   ServerMessage,
 } from "../../src/protocol";
-import { isPlayerToken, normalizeRoomCode } from "../../src/protocol";
+import { isRoomSessionResponse } from "../../src/protocol";
 import { copy } from "./copy";
 
 const SESSION_KEY = "tetra-colors.session";
@@ -89,7 +89,14 @@ export function useRoomClient(): RoomClient {
           setLatestEvent(message.event);
         } else if (message.type === "error") {
           setError(message.message);
-          if (message.code === "session_expired") clearStoredSession();
+          if (message.code === "session_expired") {
+            reconnectAllowedRef.current = false;
+            clearStoredSession();
+            setSession(null);
+            setSnapshot(null);
+            setLatestEvent(null);
+            socket.close(4401, "Session expired");
+          }
         }
       });
 
@@ -122,7 +129,7 @@ export function useRoomClient(): RoomClient {
   }, [session]);
 
   const activateSession = useCallback((nextSession: RoomSessionResponse) => {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
+    storeSession(nextSession);
     setSnapshot(null);
     setLatestEvent(null);
     setError(null);
@@ -220,7 +227,7 @@ async function requestSession(
   if (!response.ok) {
     throw new Error(readApiMessage(value) ?? copy.unknownError);
   }
-  if (!isSession(value)) {
+  if (!isRoomSessionResponse(value)) {
     throw new Error(copy.unknownError);
   }
   return value;
@@ -231,28 +238,29 @@ function readSession(): RoomSessionResponse | null {
     const stored = sessionStorage.getItem(SESSION_KEY);
     if (!stored) return null;
     const value: unknown = JSON.parse(stored);
-    return isSession(value) ? value : null;
+    if (isRoomSessionResponse(value)) return value;
+    clearStoredSession();
+    return null;
   } catch {
+    clearStoredSession();
     return null;
   }
 }
 
-function clearStoredSession(): void {
-  sessionStorage.removeItem(SESSION_KEY);
+function storeSession(session: RoomSessionResponse): void {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  } catch {
+    // The active tab can still use the room when session storage is unavailable.
+  }
 }
 
-function isSession(value: unknown): value is RoomSessionResponse {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "roomCode" in value &&
-    typeof value.roomCode === "string" &&
-    normalizeRoomCode(value.roomCode) === value.roomCode &&
-    "playerId" in value &&
-    typeof value.playerId === "string" &&
-    "playerToken" in value &&
-    isPlayerToken(value.playerToken)
-  );
+function clearStoredSession(): void {
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // Session storage can be unavailable in restricted browser contexts.
+  }
 }
 
 function readApiMessage(value: unknown): string | null {

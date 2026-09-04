@@ -145,6 +145,17 @@ export function isPlayerToken(value: unknown): value is string {
   return typeof value === "string" && PLAYER_TOKEN_PATTERN.test(value);
 }
 
+export function isRoomSessionResponse(value: unknown): value is RoomSessionResponse {
+  return (
+    isRecord(value) &&
+    typeof value.roomCode === "string" &&
+    normalizeRoomCode(value.roomCode) === value.roomCode &&
+    typeof value.playerId === "string" &&
+    value.playerId.length > 0 &&
+    isPlayerToken(value.playerToken)
+  );
+}
+
 export function isBotDifficulty(value: unknown): value is BotDifficulty {
   return value === "easy" || value === "medium" || value === "hard";
 }

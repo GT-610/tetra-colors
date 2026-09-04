@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   isPlayerToken,
+  isRoomSessionResponse,
   normalizeNickname,
   normalizeRoomCode,
   parseClientMessage,
@@ -52,5 +53,19 @@ describe("protocol validation", () => {
     expect(isPlayerToken("a".repeat(64))).toBe(true);
     expect(isPlayerToken("A".repeat(64))).toBe(false);
     expect(isPlayerToken("a".repeat(63))).toBe(false);
+  });
+
+  it("validates persisted room sessions", () => {
+    const valid = {
+      roomCode: "ABCD2",
+      playerId: "player-1",
+      playerToken: "a".repeat(64),
+    };
+
+    expect(isRoomSessionResponse(valid)).toBe(true);
+    expect(isRoomSessionResponse({ ...valid, roomCode: "abcd2" })).toBe(false);
+    expect(isRoomSessionResponse({ ...valid, playerId: "" })).toBe(false);
+    expect(isRoomSessionResponse({ ...valid, playerToken: "invalid" })).toBe(false);
+    expect(isRoomSessionResponse(null)).toBe(false);
   });
 });
