@@ -568,8 +568,10 @@ export class RoomDO extends DurableObject<Env> {
       return;
     }
 
+    const disconnectedAt = Date.now();
     player.connected = false;
-    player.disconnectedAt = Date.now();
+    player.disconnectedAt = disconnectedAt;
+    this.room.lastActivity = disconnectedAt;
     await this.persistAndBroadcast([]);
   }
 

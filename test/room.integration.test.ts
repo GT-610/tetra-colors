@@ -202,11 +202,19 @@ describe("RoomDO integration", () => {
       (snapshot) => snapshot.phase === "playing" && snapshot.game?.turnNumber !== initialTurn,
     );
 
+    const staleActivity = Date.now() - 16 * 60_000;
+    await runInDurableObject(stub, (instance) => {
+      const room = (instance as unknown as RoomInstanceHarness).room;
+      if (!room) throw new Error("Room instance was missing before disconnect");
+      room.lastActivity = staleActivity;
+    });
     connection.socket.close(1000, "Lifecycle test disconnect");
     await waitForCondition(() =>
       runInDurableObject(stub, (instance) => {
         const room = (instance as unknown as RoomInstanceHarness).room;
-        return room?.players.find((player) => player.id === host.playerId)?.connected === false;
+        if (!room) throw new Error("Room was deleted before the reconnect grace elapsed");
+        const human = room.players.find((player) => player.id === host.playerId);
+        return human?.connected === false && room.lastActivity > staleActivity;
       }),
     );
 
