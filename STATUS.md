@@ -138,6 +138,18 @@ Post-delivery optimization — Complete
   the established cleanup for accepted `session_expired` messages. The bounded rate limiter now
   removes only expired buckets and rejects new keys rather than evicting active callers. Seven test
   files now contain 37 passing tests.
+- Moved the entry and lobby ambient background to the full viewport, added an original four-shape
+  favicon, and made room-event notices expire after three seconds. Verified the entry and lobby at
+  1920 × 960 without side gutters or horizontal overflow; type checking, linting, the production
+  build, and 38 tests pass.
+- Replaced the flat opponent row with perspective-ordered seats distributed along an invisible
+  upper arc, added measured card flights from the acting hand or opponent marker to the discard
+  pile, and raised playable cards at rest. Six-player browser checks at 1920 × 960, 390 × 844, and
+  320 × 720 keep every seat and the table center visible without seat collisions or page overflow;
+  opponent card flights remain below their player markers. Eight test files now contain 40 tests.
+- Switched the game shell to the dynamic viewport height and raised the isolated table-stage
+  stacking context above the hand zone. A 390 × 844 browser check resolved the shell to the full
+  844-pixel viewport and confirmed table-stage layer 6 above hand-zone layer 5; all 40 tests pass.
 
 ## Remaining
 

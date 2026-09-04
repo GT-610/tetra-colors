@@ -22,10 +22,20 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at 8% 8%, rgb(45 212 191 / 16%), transparent 25rem),
+    radial-gradient(circle at 90% 82%, rgb(251 75 107 / 14%), transparent 28rem),
+    linear-gradient(145deg, #080b13, #07090f 55%, #0c0a12);
 }
 
 button,
@@ -44,12 +54,8 @@ button:disabled {
 }
 
 .app-shell {
-  min-height: 100vh;
+  min-height: 100dvh;
   padding: 20px;
-  background:
-    radial-gradient(circle at 8% 8%, rgb(45 212 191 / 16%), transparent 25rem),
-    radial-gradient(circle at 90% 82%, rgb(251 75 107 / 14%), transparent 28rem),
-    linear-gradient(145deg, #080b13, #07090f 55%, #0c0a12);
 }
 
 .centered-shell {
@@ -590,8 +596,9 @@ h2 {
   --table-accent: var(--teal);
   position: relative;
   display: grid;
-  min-height: 100vh;
-  grid-template-rows: auto auto auto minmax(260px, 1fr) auto;
+  min-height: 100dvh;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(300px, 1fr) auto;
   gap: 14px;
   overflow: hidden;
   padding: 14px 12px 0;
@@ -651,22 +658,39 @@ h2 {
   gap: 12px;
 }
 
-.opponent-row {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 2px 1px 7px;
-  scrollbar-width: none;
-}
-
-.opponent-row::-webkit-scrollbar,
 .hand-scroller::-webkit-scrollbar {
   display: none;
 }
 
+.table-stage {
+  position: relative;
+  width: min(100%, 1080px);
+  min-width: 0;
+  min-height: 300px;
+  margin-inline: auto;
+  z-index: 6;
+  isolation: isolate;
+}
+
+.opponent-arc {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  pointer-events: none;
+}
+
 .opponent-chip {
+  --opponent-width: clamp(92px, 18vw, 150px);
+  position: absolute;
+  top: clamp(24px, var(--seat-top), calc(100% - 24px));
+  left: clamp(
+    calc(var(--opponent-width) / 2),
+    var(--seat-left),
+    calc(100% - var(--opponent-width) / 2)
+  );
   display: flex;
-  min-width: 148px;
+  width: var(--opponent-width);
+  min-width: 0;
   align-items: center;
   gap: 9px;
   padding: 9px 10px;
@@ -676,6 +700,7 @@ h2 {
   transition:
     border-color 160ms ease,
     background 160ms ease;
+  transform: translate(-50%, -50%);
 }
 
 .opponent-chip.active-player {
@@ -720,6 +745,10 @@ h2 {
   gap: 1px;
 }
 
+.opponent-chip > div > span {
+  white-space: nowrap;
+}
+
 .opponent-chip strong {
   overflow: hidden;
   font-size: 0.75rem;
@@ -727,16 +756,9 @@ h2 {
   white-space: nowrap;
 }
 
-.opponent-chip span,
-.opponent-chip em {
+.opponent-chip span {
   color: #7f8a9d;
   font-size: 0.62rem;
-  font-style: normal;
-}
-
-.opponent-chip em {
-  margin-left: auto;
-  color: var(--amber);
 }
 
 .turn-status {
@@ -815,7 +837,10 @@ h2 {
 }
 
 .table-center {
-  position: relative;
+  position: absolute;
+  z-index: 2;
+  top: 64%;
+  left: 50%;
   display: grid;
   grid-template-columns: minmax(82px, 1fr) minmax(82px, 1fr);
   align-content: center;
@@ -823,8 +848,8 @@ h2 {
   justify-content: center;
   gap: 24px;
   width: min(100%, 340px);
-  margin: 0 auto;
   padding: 30px 24px 38px;
+  transform: translate(-50%, -50%);
 }
 
 .direction-label {
@@ -885,6 +910,44 @@ h2 {
 .discard-pile {
   justify-self: center;
   transform: rotate(3deg);
+}
+
+.card-flight {
+  position: absolute;
+  z-index: 3;
+  top: var(--flight-from-y);
+  left: var(--flight-from-x);
+  pointer-events: none;
+  animation: card-flight var(--flight-duration) cubic-bezier(0.22, 0.78, 0.25, 1) forwards;
+  transform: translate(-50%, -50%) scale(var(--flight-from-scale)) rotate(-5deg);
+  transform-origin: center;
+  will-change: top, left, opacity, transform;
+}
+
+.card-flight-self {
+  z-index: 6;
+}
+
+.card-flight .card-face {
+  width: var(--flight-width);
+}
+
+@keyframes card-flight {
+  0% {
+    opacity: 0.86;
+  }
+
+  18%,
+  84% {
+    opacity: 1;
+  }
+
+  to {
+    top: var(--flight-to-y);
+    left: var(--flight-to-x);
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1) rotate(3deg);
+  }
 }
 
 .color-indicator {
@@ -1053,6 +1116,7 @@ h2 {
 .hand-zone {
   position: relative;
   z-index: 5;
+  min-width: 0;
   margin: 0 -12px;
   padding: 14px 12px max(18px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
@@ -1095,7 +1159,7 @@ h2 {
   display: flex;
   gap: 7px;
   overflow-x: auto;
-  padding: 8px 4px 13px;
+  padding: 15px 4px 13px;
   scroll-snap-type: x proximity;
   scrollbar-width: none;
 }
@@ -1118,11 +1182,12 @@ h2 {
   box-shadow:
     0 0 0 3px color-mix(in srgb, var(--table-accent) 70%, white 10%),
     0 16px 36px rgb(0 0 0 / 34%);
+  transform: translateY(-6px);
 }
 
 .hand-card.playable-card:not(:disabled):hover .card-face,
 .hand-card.playable-card:not(:disabled):focus-visible .card-face {
-  transform: translateY(-9px);
+  transform: translateY(-13px);
 }
 
 .hand-card:focus-visible {
@@ -1331,6 +1396,28 @@ h2 {
   width: 100%;
 }
 
+@media (max-width: 420px) {
+  .opponent-chip {
+    --opponent-width: 82px;
+    gap: 6px;
+    padding: 7px 8px;
+  }
+
+  .opponent-symbol {
+    width: 15px;
+    height: 15px;
+    flex-basis: 15px;
+  }
+
+  .opponent-chip strong {
+    font-size: 0.68rem;
+  }
+
+  .opponent-chip span {
+    font-size: 0.56rem;
+  }
+}
+
 @media (min-width: 640px) {
   .app-shell {
     padding: 28px;
@@ -1351,10 +1438,6 @@ h2 {
 
   .game-shell {
     padding: 18px 22px 0;
-  }
-
-  .opponent-row {
-    justify-content: center;
   }
 
   .table-center {
@@ -1433,12 +1516,11 @@ h2 {
   }
 
   .game-shell {
-    grid-template-rows: auto auto auto minmax(320px, 1fr) auto;
+    grid-template-rows: auto auto minmax(360px, 1fr) auto;
     padding-inline: 36px;
   }
 
   .game-topbar,
-  .opponent-row,
   .turn-status {
     width: min(100%, 1080px);
     margin-inline: auto;
@@ -1485,7 +1567,12 @@ h2 {
 
   .turn-pulse.self-turn,
   .event-toast,
+  .card-flight,
   .hand-card.drawn-card .card-face {
     animation: none;
+  }
+
+  .card-flight {
+    display: none;
   }
 }
