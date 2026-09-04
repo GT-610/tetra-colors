@@ -312,15 +312,13 @@ h2 {
   line-height: 1.5;
 }
 
-.connecting-panel,
-.table-placeholder {
+.connecting-panel {
   width: min(100%, 620px);
   padding: 44px 28px;
   text-align: center;
 }
 
-.connecting-panel h1,
-.table-placeholder h1 {
+.connecting-panel h1 {
   margin-top: 30px;
   font-size: clamp(2.2rem, 9vw, 4rem);
   line-height: 1;
@@ -568,28 +566,6 @@ h2 {
   }
 }
 
-.mini-hands {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
-  margin: 30px 0;
-  padding: 0;
-  list-style: none;
-}
-
-.mini-hand {
-  display: grid;
-  width: 46px;
-  aspect-ratio: 0.72;
-  place-items: center;
-  border: 2px solid currentColor;
-  border-radius: 9px;
-  color: var(--teal);
-  background: rgb(255 255 255 / 5%);
-  font-weight: 900;
-}
-
 .color-teal {
   --player-color: var(--teal);
 }
@@ -608,22 +584,6 @@ h2 {
 
 .player-tile[class*="color-"] {
   box-shadow: inset 3px 0 0 var(--player-color);
-}
-
-.mini-hand.color-teal {
-  color: var(--teal);
-}
-
-.mini-hand.color-azure {
-  color: var(--azure);
-}
-
-.mini-hand.color-amber {
-  color: var(--amber);
-}
-
-.mini-hand.color-coral {
-  color: var(--coral);
 }
 
 .game-shell {
