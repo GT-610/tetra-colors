@@ -12,6 +12,7 @@ import { copy } from "./copy";
 
 const SESSION_KEY = "tetra-colors.session";
 const HEARTBEAT_MS = 15_000;
+const EVENT_DISPLAY_MS = 3_000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
 export type ConnectionState = "idle" | "connecting" | "connected" | "reconnecting" | "disconnected";
@@ -61,6 +62,7 @@ export function useRoomClient(): RoomClient {
     let reconnectAttempts = 0;
     let reconnectTimer: number | undefined;
     let heartbeatTimer: number | undefined;
+    let eventTimer: number | undefined;
 
     const connect = () => {
       if (disposed) return;
@@ -94,7 +96,9 @@ export function useRoomClient(): RoomClient {
         if (message.type === "snapshot") {
           setSnapshot(message.snapshot);
         } else if (message.type === "event") {
+          if (eventTimer !== undefined) window.clearTimeout(eventTimer);
           setLatestEvent(message.event);
+          eventTimer = window.setTimeout(() => setLatestEvent(null), EVENT_DISPLAY_MS);
         } else if (message.type === "error") {
           setError(message.message);
           if (message.code === "session_expired") {
@@ -128,6 +132,7 @@ export function useRoomClient(): RoomClient {
       disposed = true;
       if (heartbeatTimer !== undefined) window.clearInterval(heartbeatTimer);
       if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
+      if (eventTimer !== undefined) window.clearTimeout(eventTimer);
       socketRef.current?.close(1000, "Client navigation");
       socketRef.current = null;
     };

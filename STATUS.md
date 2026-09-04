@@ -138,6 +138,10 @@ Post-delivery optimization — Complete
   the established cleanup for accepted `session_expired` messages. The bounded rate limiter now
   removes only expired buckets and rejects new keys rather than evicting active callers. Seven test
   files now contain 37 passing tests.
+- Moved the entry and lobby ambient background to the full viewport, added an original four-shape
+  favicon, and made room-event notices expire after three seconds. Verified the entry and lobby at
+  1920 × 960 without side gutters or horizontal overflow; type checking, linting, the production
+  build, and 38 tests pass.
 
 ## Remaining
 

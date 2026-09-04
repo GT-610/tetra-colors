@@ -59,7 +59,7 @@ class MockWebSocket {
 }
 
 const sockets: MockWebSocket[] = [];
-const reconnectCallbacks: Array<() => void> = [];
+const timeoutCallbacks: Array<{ callback: () => void; delay: number }> = [];
 let storedSession: string | null;
 let removeItem: ReturnType<typeof vi.fn>;
 
@@ -67,7 +67,7 @@ beforeEach(() => {
   hookHarness.effect = undefined;
   hookHarness.stateSetters.length = 0;
   sockets.length = 0;
-  reconnectCallbacks.length = 0;
+  timeoutCallbacks.length = 0;
   storedSession = JSON.stringify(session);
   removeItem = vi.fn((key: string) => {
     if (key === SESSION_KEY) storedSession = null;
@@ -83,9 +83,9 @@ beforeEach(() => {
     location: { host: "example.test", protocol: "https:" },
     setInterval: vi.fn(() => 1),
     clearInterval: vi.fn(),
-    setTimeout: vi.fn((callback: () => void) => {
-      reconnectCallbacks.push(callback);
-      return reconnectCallbacks.length;
+    setTimeout: vi.fn((callback: () => void, delay: number) => {
+      timeoutCallbacks.push({ callback, delay });
+      return timeoutCallbacks.length;
     }),
     clearTimeout: vi.fn(),
   });
@@ -102,11 +102,11 @@ describe("room client session invalidation", () => {
 
     for (let attempt = 0; attempt <= 5; attempt += 1) {
       sockets[attempt]?.emit("close");
-      if (attempt < 5) reconnectCallbacks.shift()?.();
+      if (attempt < 5) timeoutCallbacks.shift()?.callback();
     }
 
     expect(sockets).toHaveLength(6);
-    expect(reconnectCallbacks).toHaveLength(0);
+    expect(timeoutCallbacks).toHaveLength(0);
     expect(removeItem).toHaveBeenCalledWith(SESSION_KEY);
     expect(stateSetter(0)).toHaveBeenCalledWith(null);
     expect(stateSetter(1)).toHaveBeenCalledWith(null);
@@ -132,6 +132,23 @@ describe("room client session invalidation", () => {
     expect(stateSetter(1)).toHaveBeenCalledWith(null);
     expect(stateSetter(4)).toHaveBeenCalledWith(null);
     expect(socket?.close).toHaveBeenCalledWith(4401, "Session expired");
+  });
+
+  it("clears room events after the display interval", () => {
+    useRoomClient();
+    hookHarness.effect?.();
+    const event = { type: "player-reconnected", playerId: "player-two" } as const;
+
+    sockets[0]?.emit("message", {
+      data: JSON.stringify({ type: "event", event }),
+    });
+
+    expect(stateSetter(4)).toHaveBeenCalledWith(event);
+    expect(timeoutCallbacks).toHaveLength(1);
+    expect(timeoutCallbacks[0]?.delay).toBe(3_000);
+
+    timeoutCallbacks[0]?.callback();
+    expect(stateSetter(4)).toHaveBeenLastCalledWith(null);
   });
 });
 
