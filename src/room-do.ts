@@ -4,6 +4,7 @@ import type { Env } from "./env";
 import type { BotDifficulty, GameAction, GameEvent, GameState } from "./logic";
 import { applyGameAction, chooseBotAction, getPlayableCards, startGame } from "./logic";
 import {
+  isPlayerToken,
   normalizeNickname,
   type PublicPlayer,
   parseClientMessage,
@@ -39,7 +40,6 @@ interface RoomData {
   hostId: string;
   players: RoomPlayer[];
   game: GameState | null;
-  round: number;
   lastActivity: number;
   turnDeadline: number | null;
   scheduledBotAt: number | null;
@@ -81,7 +81,7 @@ export class RoomDO extends DurableObject<Env> {
     }
 
     if (request.method === "GET" && url.pathname === "/websocket") {
-      return this.openWebSocket(request, url);
+      return this.openWebSocket(request);
     }
 
     return jsonError("room_not_found", "房间不存在", 404);
@@ -121,7 +121,6 @@ export class RoomDO extends DurableObject<Env> {
     }
 
     if (parsed.type === "heartbeat") {
-      this.sendSnapshot(socket, attachment.playerId);
       return;
     }
 
@@ -215,7 +214,6 @@ export class RoomDO extends DurableObject<Env> {
       hostId: session.player.id,
       players: [session.player],
       game: null,
-      round: 0,
       lastActivity: now,
       turnDeadline: null,
       scheduledBotAt: null,
@@ -235,9 +233,12 @@ export class RoomDO extends DurableObject<Env> {
 
     const body = await readJson(request);
     const nickname = normalizeNickname(body?.nickname);
-    const providedToken = typeof body?.playerToken === "string" ? body.playerToken : null;
+    const providedToken = body?.playerToken;
 
-    if (providedToken) {
+    if (providedToken !== undefined) {
+      if (!isPlayerToken(providedToken)) {
+        return jsonError("session_expired", "原会话已失效", 401);
+      }
       const tokenHash = await hashToken(providedToken);
       const existing = this.room.players.find(
         (player) => player.kind === "human" && player.tokenHash === tokenHash,
@@ -264,9 +265,7 @@ export class RoomDO extends DurableObject<Env> {
     const session = await createHumanPlayer(nickname);
     this.room.players.push(session.player);
     this.room.lastActivity = Date.now();
-    await this.persistAndBroadcast([
-      { type: "player-joined", playerId: session.player.id, nickname: session.player.nickname },
-    ]);
+    await this.persistAndBroadcast([]);
 
     return Response.json(toSessionResponse(this.room.code, session.player.id, session.rawToken), {
       status: 201,
@@ -274,7 +273,7 @@ export class RoomDO extends DurableObject<Env> {
     });
   }
 
-  private async openWebSocket(request: Request, url: URL): Promise<Response> {
+  private async openWebSocket(request: Request): Promise<Response> {
     if (!this.room) {
       return jsonError("room_not_found", "房间不存在", 404);
     }
@@ -282,8 +281,8 @@ export class RoomDO extends DurableObject<Env> {
       return jsonError("invalid_message", "需要 WebSocket 连接", 426);
     }
 
-    const rawToken = url.searchParams.get("token");
-    if (!rawToken) {
+    const rawToken = request.headers.get("Sec-WebSocket-Protocol")?.trim();
+    if (!isPlayerToken(rawToken)) {
       return jsonError("session_expired", "缺少会话凭据", 401);
     }
 
@@ -316,18 +315,11 @@ export class RoomDO extends DurableObject<Env> {
       wasAway ? [{ type: "player-reconnected", playerId: player.id }] : [],
     );
 
-    this.send(
-      socketMessage({
-        type: "welcome",
-        playerId: player.id,
-        playerToken: rawToken,
-        roomCode: this.room.code,
-      }),
-      server,
-    );
-    this.sendSnapshot(server, player.id);
-
-    return new Response(null, { status: 101, webSocket: client });
+    return new Response(null, {
+      status: 101,
+      webSocket: client,
+      headers: { "Sec-WebSocket-Protocol": rawToken },
+    });
   }
 
   private async addBot(
@@ -357,9 +349,7 @@ export class RoomDO extends DurableObject<Env> {
       disconnectedAt: null,
     };
     this.room.players.push(bot);
-    await this.persistAndBroadcast([
-      { type: "player-joined", playerId: bot.id, nickname: bot.nickname },
-    ]);
+    await this.persistAndBroadcast([]);
   }
 
   private async removeBot(socket: WebSocket, playerId: string, botId: string): Promise<void> {
@@ -376,7 +366,7 @@ export class RoomDO extends DurableObject<Env> {
     }
 
     this.room.players = this.room.players.filter((player) => player.id !== botId);
-    await this.persistAndBroadcast([{ type: "player-left", playerId: botId }]);
+    await this.persistAndBroadcast([]);
   }
 
   private async startRound(socket: WebSocket, playerId: string): Promise<void> {
@@ -402,7 +392,6 @@ export class RoomDO extends DurableObject<Env> {
       runtimeRandom,
     );
     this.room.phase = "playing";
-    this.room.round += 1;
     this.room.turnDeadline = Date.now() + TURN_DURATION_MS;
     this.scheduleBotIfNeeded();
     await this.persistAndBroadcast([]);
@@ -449,12 +438,13 @@ export class RoomDO extends DurableObject<Env> {
         return;
       }
       this.reassignHost();
-      await this.persistAndBroadcast([{ type: "player-left", playerId }]);
+      await this.persistAndBroadcast([]);
     } else {
       player.connected = false;
       player.controlledByBot = true;
       player.difficulty = "medium";
       player.disconnectedAt = null;
+      this.reassignHost();
       this.scheduleBotIfNeeded();
       await this.persistAndBroadcast([{ type: "player-became-bot", playerId }]);
     }
@@ -539,7 +529,6 @@ export class RoomDO extends DurableObject<Env> {
     for (const player of expired) {
       if (this.room.phase === "lobby") {
         this.room.players = this.room.players.filter((candidate) => candidate.id !== player.id);
-        events.push({ type: "player-left", playerId: player.id });
       } else {
         player.controlledByBot = true;
         player.difficulty = "medium";
@@ -629,8 +618,14 @@ export class RoomDO extends DurableObject<Env> {
   }
 
   private reassignHost(): void {
-    if (!this.room || this.room.players.some((player) => player.id === this.room?.hostId)) return;
-    this.room.hostId = this.room.players[0]?.id ?? "";
+    if (!this.room) return;
+    const currentHost = this.room.players.find((player) => player.id === this.room?.hostId);
+    if (currentHost && !isBotControlled(currentHost)) return;
+
+    const connectedHuman = this.room.players.find(
+      (player) => player.kind === "human" && player.connected && !player.controlledByBot,
+    );
+    this.room.hostId = connectedHuman?.id ?? currentHost?.id ?? this.room.players[0]?.id ?? "";
   }
 
   private consumeAction(playerId: string): boolean {
@@ -792,7 +787,6 @@ export class RoomDO extends DurableObject<Env> {
                   : [],
               drawnCardId: currentPlayer.id === playerId ? game.drawnCardId : null,
               winnerId: game.winnerId,
-              config: game.config,
             }
           : null,
     };
@@ -897,12 +891,9 @@ function toRoomEvents(events: readonly GameEvent[]): RoomEvent[] {
         type: "card-played",
         playerId: event.playerId,
         card: event.card,
-        chosenColor: event.chosenColor,
       });
     } else if (event.type === "cards-drawn") {
       mapped.push({ type: "cards-drawn", playerId: event.playerId, count: event.count });
-    } else if (event.type === "game-finished") {
-      mapped.push({ type: "game-finished", winnerId: event.winnerId });
     }
   }
   return mapped;

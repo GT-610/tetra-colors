@@ -12,7 +12,7 @@ import type {
   TurnDirection,
 } from "./types";
 
-export const DEFAULT_GAME_CONFIG: GameConfig = {
+const DEFAULT_GAME_CONFIG: GameConfig = {
   initialHandSize: 7,
   maxPlayers: 6,
   enforceWildDrawFour: true,
@@ -134,50 +134,13 @@ export function getPlayableCards(state: GameState, playerId: string): Card[] {
   return playable;
 }
 
-export function advanceIndex(
+function advanceIndex(
   currentIndex: number,
   direction: TurnDirection,
   playerCount: number,
   steps = 1,
 ): number {
   return (((currentIndex + direction * steps) % playerCount) + playerCount) % playerCount;
-}
-
-export function validateGameState(state: GameState): string[] {
-  const issues: string[] = [];
-  const allCards = [
-    ...state.drawPile,
-    ...state.discardPile,
-    ...state.players.flatMap((player) => player.hand),
-  ];
-  const ids = new Set(allCards.map((card) => card.id));
-
-  if (allCards.length !== createDeck().length) {
-    issues.push(`expected ${createDeck().length} cards, found ${allCards.length}`);
-  }
-  if (ids.size !== allCards.length) {
-    issues.push("card identifiers are not unique");
-  }
-  if (state.discardPile.length === 0) {
-    issues.push("discard pile is empty");
-  }
-  if (!state.players[state.turnIndex]) {
-    issues.push("turn index is outside the player list");
-  }
-  if (state.phase === "finished") {
-    const winner = state.players.find((player) => player.id === state.winnerId);
-    if (winner?.hand.length !== 0) {
-      issues.push("finished game has no empty-handed winner");
-    }
-  }
-  if (state.drawnCardId) {
-    const currentPlayer = state.players[state.turnIndex];
-    if (!currentPlayer?.hand.some((card) => card.id === state.drawnCardId)) {
-      issues.push("drawn card is not held by the current player");
-    }
-  }
-
-  return issues;
 }
 
 function playCard(
@@ -204,7 +167,7 @@ function playCard(
   if (isWild && chosenColor === undefined) {
     return { ok: false, error: "color_required" };
   }
-  if (chosenColor !== undefined && !isCardColor(chosenColor)) {
+  if (chosenColor !== undefined && (!isWild || !isCardColor(chosenColor))) {
     return { ok: false, error: "color_not_allowed" };
   }
 
@@ -224,15 +187,35 @@ function playCard(
       type: "card-played",
       playerId: currentPlayer.id,
       card,
-      chosenColor: nextState.currentColor,
     },
   ];
 
-  if (nextPlayer.hand.length === 0) {
-    nextState.phase = "finished";
-    nextState.winnerId = nextPlayer.id;
-    events.push({ type: "game-finished", winnerId: nextPlayer.id });
+  if (card.kind === "draw-two" || card.kind === "wild-draw-four") {
+    const penalty = card.kind === "draw-two" ? 2 : 4;
+    const penalizedIndex = advanceIndex(
+      nextState.turnIndex,
+      nextState.direction,
+      nextState.players.length,
+    );
+    const drawn = drawCards(nextState, penalizedIndex, penalty, random);
+    const penalizedPlayer = nextState.players[penalizedIndex];
+    if (!penalizedPlayer) {
+      throw new Error("Penalty target disappeared");
+    }
+    events.push({
+      type: "cards-drawn",
+      playerId: penalizedPlayer.id,
+      count: drawn,
+    });
+    if (nextPlayer.hand.length === 0) {
+      return finishGame(nextState, nextPlayer.id, events);
+    }
+    moveTurn(nextState, 2, events);
     return { ok: true, state: nextState, events };
+  }
+
+  if (nextPlayer.hand.length === 0) {
+    return finishGame(nextState, nextPlayer.id, events);
   }
 
   if (card.kind === "reverse") {
@@ -247,30 +230,14 @@ function playCard(
     return { ok: true, state: nextState, events };
   }
 
-  if (card.kind === "draw-two" || card.kind === "wild-draw-four") {
-    const penalty = card.kind === "draw-two" ? 2 : 4;
-    const penalizedIndex = advanceIndex(
-      nextState.turnIndex,
-      nextState.direction,
-      nextState.players.length,
-    );
-    const drawn = drawCards(nextState, penalizedIndex, penalty, random, events);
-    const penalizedPlayer = nextState.players[penalizedIndex];
-    if (!penalizedPlayer) {
-      throw new Error("Penalty target disappeared");
-    }
-    events.push({
-      type: "cards-drawn",
-      playerId: penalizedPlayer.id,
-      count: drawn,
-      reason: "penalty",
-    });
-    moveTurn(nextState, 2, events);
-    return { ok: true, state: nextState, events };
-  }
-
   moveTurn(nextState, 1, events);
   return { ok: true, state: nextState, events };
+}
+
+function finishGame(state: GameState, winnerId: string, events: GameEvent[]): GameResult {
+  state.phase = "finished";
+  state.winnerId = winnerId;
+  return { ok: true, state, events };
 }
 
 function drawCard(state: GameState, currentPlayer: GamePlayer, random: RandomSource): GameResult {
@@ -280,14 +247,14 @@ function drawCard(state: GameState, currentPlayer: GamePlayer, random: RandomSou
 
   const nextState = cloneState(state);
   const events: GameEvent[] = [];
-  const count = drawCards(nextState, nextState.turnIndex, 1, random, events);
+  const count = drawCards(nextState, nextState.turnIndex, 1, random);
   const nextPlayer = nextState.players[nextState.turnIndex];
 
   if (!nextPlayer) {
     throw new Error("Current player disappeared while drawing");
   }
 
-  events.push({ type: "cards-drawn", playerId: currentPlayer.id, count, reason: "turn" });
+  events.push({ type: "cards-drawn", playerId: currentPlayer.id, count });
 
   const drawn = nextPlayer.hand.at(-1);
   const topDiscard = nextState.discardPile.at(-1);
@@ -321,7 +288,6 @@ function drawCards(
   playerIndex: number,
   count: number,
   random: RandomSource,
-  events: GameEvent[],
 ): number {
   const player = state.players[playerIndex];
   if (!player) {
@@ -331,10 +297,7 @@ function drawCards(
   let drawn = 0;
   for (let index = 0; index < count; index += 1) {
     if (state.drawPile.length === 0) {
-      const recycled = recycleDiscardPile(state, random);
-      if (recycled > 0) {
-        events.push({ type: "discard-recycled", count: recycled });
-      }
+      recycleDiscardPile(state, random);
     }
 
     const card = state.drawPile.pop();
@@ -349,20 +312,19 @@ function drawCards(
   return drawn;
 }
 
-function recycleDiscardPile(state: GameState, random: RandomSource): number {
+function recycleDiscardPile(state: GameState, random: RandomSource): void {
   if (state.discardPile.length <= 1) {
-    return 0;
+    return;
   }
 
   const topDiscard = state.discardPile.at(-1);
   if (!topDiscard) {
-    return 0;
+    return;
   }
 
   const recyclable = state.discardPile.slice(0, -1);
   state.discardPile = [topDiscard];
   state.drawPile = shuffleCards(recyclable, random);
-  return recyclable.length;
 }
 
 function moveTurn(state: GameState, steps: number, events: GameEvent[]): void {
@@ -372,7 +334,7 @@ function moveTurn(state: GameState, steps: number, events: GameEvent[]): void {
   if (!nextPlayer) {
     throw new Error("Next player does not exist");
   }
-  events.push({ type: "turn-started", playerId: nextPlayer.id, turnNumber: state.turnNumber });
+  events.push({ type: "turn-started" });
 }
 
 function cloneState(state: GameState): GameState {

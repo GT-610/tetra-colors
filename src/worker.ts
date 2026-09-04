@@ -1,20 +1,22 @@
 import type { Env } from "./env";
-import { normalizeNickname, ROOM_CODE_LENGTH } from "./protocol";
+import {
+  isPlayerToken,
+  normalizeNickname,
+  normalizeRoomCode,
+  ROOM_CODE_ALPHABET,
+  ROOM_CODE_LENGTH,
+  type ServerErrorCode,
+} from "./protocol";
+import { FixedWindowRateLimiter } from "./rate-limit";
 
 export { RoomDO } from "./room-do";
 
-const ROOM_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-const ROOM_CODE_PATTERN = new RegExp(`^[${ROOM_CODE_ALPHABET}]{${ROOM_CODE_LENGTH}}$`);
 const HTTP_BODY_LIMIT = 2_048;
 const CREATE_LIMIT_PER_MINUTE = 8;
 const JOIN_LIMIT_PER_MINUTE = 30;
-
-interface HttpRateBucket {
-  startedAt: number;
-  count: number;
-}
-
-const httpRateBuckets = new Map<string, HttpRateBucket>();
+const HTTP_RATE_WINDOW_MS = 60_000;
+const HTTP_RATE_BUCKET_LIMIT = 1_000;
+const httpRateLimiter = new FixedWindowRateLimiter(HTTP_RATE_WINDOW_MS, HTTP_RATE_BUCKET_LIMIT);
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -31,8 +33,14 @@ export default {
       if (!consumeHttpLimit(request, "create", CREATE_LIMIT_PER_MINUTE)) {
         return apiError("rate_limited", "创建房间过于频繁，请稍后再试", 429);
       }
+      if (!isJsonRequest(request)) {
+        return apiError("invalid_message", "请求必须使用 JSON 格式", 415);
+      }
 
       const body = await readSmallJson(request);
+      if (!body) {
+        return apiError("invalid_message", "请求内容无效", 400);
+      }
       const nickname = normalizeNickname(body?.nickname);
       if (!nickname) {
         return apiError("invalid_nickname", "请输入 1–20 个字符的昵称", 400);
@@ -61,6 +69,9 @@ export default {
       if (!consumeHttpLimit(request, "join", JOIN_LIMIT_PER_MINUTE)) {
         return apiError("rate_limited", "加入房间过于频繁，请稍后再试", 429);
       }
+      if (!isJsonRequest(request)) {
+        return apiError("invalid_message", "请求必须使用 JSON 格式", 415);
+      }
 
       const roomCode = normalizeRoomCode(joinMatch[1]);
       if (!roomCode) {
@@ -73,7 +84,7 @@ export default {
       }
 
       const providedToken = typeof body.playerToken === "string" ? body.playerToken : undefined;
-      if (providedToken !== undefined && !/^[a-f0-9]{64}$/.test(providedToken)) {
+      if (providedToken !== undefined && !isPlayerToken(providedToken)) {
         return apiError("session_expired", "会话凭据无效", 401);
       }
       const nickname = normalizeNickname(body.nickname);
@@ -96,8 +107,8 @@ export default {
     const webSocketMatch = url.pathname.match(/^\/ws\/([^/]+)$/);
     if (request.method === "GET" && webSocketMatch) {
       const roomCode = normalizeRoomCode(webSocketMatch[1]);
-      const token = url.searchParams.get("token");
-      if (!roomCode || !token || !/^[a-f0-9]{64}$/.test(token)) {
+      const token = request.headers.get("Sec-WebSocket-Protocol")?.trim();
+      if (!roomCode || !isPlayerToken(token)) {
         return apiError("session_expired", "会话凭据无效", 401);
       }
       if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
@@ -106,7 +117,6 @@ export default {
 
       const room = env.ROOMS.getByName(roomCode);
       const internalUrl = new URL("https://room.internal/websocket");
-      internalUrl.searchParams.set("token", token);
       return room.fetch(new Request(internalUrl, request));
     }
 
@@ -124,12 +134,6 @@ function generateRoomCode(): string {
   return [...values].map((value) => ROOM_CODE_ALPHABET[value % ROOM_CODE_ALPHABET.length]).join("");
 }
 
-function normalizeRoomCode(value: string | undefined): string | null {
-  if (!value) return null;
-  const normalized = value.trim().toUpperCase();
-  return ROOM_CODE_PATTERN.test(normalized) ? normalized : null;
-}
-
 async function readSmallJson(request: Request): Promise<Record<string, unknown> | null> {
   const contentLength = Number(request.headers.get("Content-Length") ?? 0);
   if (contentLength > HTTP_BODY_LIMIT) {
@@ -137,11 +141,29 @@ async function readSmallJson(request: Request): Promise<Record<string, unknown> 
   }
 
   try {
-    const text = await request.text();
-    if (new TextEncoder().encode(text).byteLength > HTTP_BODY_LIMIT) {
-      return null;
+    if (!request.body) return null;
+    const reader = request.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > HTTP_BODY_LIMIT) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
     }
-    const value: unknown = JSON.parse(text);
+
+    const body = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      body.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body));
     return typeof value === "object" && value !== null && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : null;
@@ -151,25 +173,18 @@ async function readSmallJson(request: Request): Promise<Record<string, unknown> 
 }
 
 function consumeHttpLimit(request: Request, action: string, limit: number): boolean {
-  const now = Date.now();
-  if (httpRateBuckets.size > 1_000) {
-    for (const [key, value] of httpRateBuckets) {
-      if (now - value.startedAt >= 60_000) httpRateBuckets.delete(key);
-    }
-  }
   const address = request.headers.get("CF-Connecting-IP") ?? "local";
-  const key = `${action}:${address}`;
-  const bucket = httpRateBuckets.get(key);
-  if (!bucket || now - bucket.startedAt >= 60_000) {
-    httpRateBuckets.set(key, { startedAt: now, count: 1 });
-    return true;
-  }
-
-  bucket.count += 1;
-  return bucket.count <= limit;
+  return httpRateLimiter.consume(`${action}:${address}`, limit);
 }
 
-function apiError(error: string, message: string, status: number): Response {
+function isJsonRequest(request: Request): boolean {
+  return (
+    request.headers.get("Content-Type")?.split(";", 1)[0]?.trim().toLowerCase() ===
+    "application/json"
+  );
+}
+
+function apiError(error: ServerErrorCode, message: string, status: number): Response {
   return Response.json({ error, message }, { status, headers: { "Cache-Control": "no-store" } });
 }
 

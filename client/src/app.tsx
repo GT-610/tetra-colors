@@ -1,7 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { BotDifficulty, CardColor } from "../../src/logic";
-import type { PublicPlayer, RoomSnapshot } from "../../src/protocol";
+import {
+  MAX_NICKNAME_LENGTH,
+  normalizeRoomCode,
+  type PublicPlayer,
+  type RoomSnapshot,
+} from "../../src/protocol";
 import { copy } from "./copy";
 import { GameTable, ResultScreen } from "./game-table";
 import { type ConnectionState, useRoomClient } from "./room-client";
@@ -13,6 +18,7 @@ const SHAPE_CLASSES: Record<CardColor, string> = {
   azure: "shape-diamond",
 };
 const EMPTY_SEAT_IDS = ["empty-one", "empty-two", "empty-three", "empty-four", "empty-five"];
+const PLAYER_COLORS = ["teal", "azure", "amber", "coral"] as const satisfies readonly CardColor[];
 
 export function App() {
   const room = useRoomClient();
@@ -63,7 +69,6 @@ export function App() {
 
   return (
     <GameTable
-      key={`${room.snapshot.game?.turnNumber}:${room.snapshot.game?.topDiscard.id}:${room.snapshot.hand.length}:${room.snapshot.game?.drawnCardId ?? ""}`}
       snapshot={room.snapshot}
       connectionState={room.connectionState}
       error={room.error}
@@ -86,9 +91,9 @@ function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeS
   const [nickname, setNickname] = useState("");
   const [roomCode, setRoomCode] = useState("");
   const normalizedNickname = nickname.trim();
-  const normalizedRoomCode = roomCode.trim().toUpperCase();
-  const nicknameValid = normalizedNickname.length > 0 && normalizedNickname.length <= 20;
-  const roomCodeValid = /^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}$/.test(normalizedRoomCode);
+  const normalizedRoomCode = normalizeRoomCode(roomCode);
+  const nicknameValid =
+    normalizedNickname.length > 0 && normalizedNickname.length <= MAX_NICKNAME_LENGTH;
 
   return (
     <main className="app-shell welcome-shell">
@@ -117,7 +122,7 @@ function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeS
           <span>{copy.nicknameLabel}</span>
           <input
             autoComplete="nickname"
-            maxLength={20}
+            maxLength={MAX_NICKNAME_LENGTH}
             placeholder={copy.nicknamePlaceholder}
             value={nickname}
             onChange={(event) => {
@@ -159,8 +164,10 @@ function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeS
         <button
           className="button button-secondary"
           type="button"
-          disabled={!nicknameValid || !roomCodeValid || busy}
-          onClick={() => void onJoin(normalizedNickname, normalizedRoomCode)}
+          disabled={!nicknameValid || !normalizedRoomCode || busy}
+          onClick={() => {
+            if (normalizedRoomCode) void onJoin(normalizedNickname, normalizedRoomCode);
+          }}
         >
           {busy ? copy.entering : copy.joinRoom}
         </button>
@@ -189,15 +196,21 @@ function LobbyScreen({ snapshot, connectionState, error, onSend, onLeave }: Lobb
   const isHost = snapshot.selfId === snapshot.hostId;
   const canStart = snapshot.players.length >= 2;
 
-  const subtitle = useMemo(
-    () => `${snapshot.players.length} / 6 ${copy.seats}`,
-    [snapshot.players.length],
-  );
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1_500);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
+  const subtitle = `${snapshot.players.length} / 6 ${copy.seats}`;
 
   const copyRoomCode = async () => {
-    await navigator.clipboard.writeText(snapshot.roomCode);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1_500);
+    try {
+      await navigator.clipboard.writeText(snapshot.roomCode);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
   };
 
   return (
@@ -356,5 +369,5 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
 }
 
 function colorForIndex(index: number): CardColor {
-  return (["teal", "azure", "amber", "coral"] as const)[index % 4] ?? "teal";
+  return PLAYER_COLORS[index % PLAYER_COLORS.length] ?? "teal";
 }

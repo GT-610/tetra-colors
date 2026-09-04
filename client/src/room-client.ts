@@ -7,6 +7,7 @@ import type {
   RoomSnapshot,
   ServerMessage,
 } from "../../src/protocol";
+import { isRoomSessionResponse } from "../../src/protocol";
 import { copy } from "./copy";
 
 const SESSION_KEY = "tetra-colors.session";
@@ -15,7 +16,7 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 
 export type ConnectionState = "idle" | "connecting" | "connected" | "reconnecting" | "disconnected";
 
-export interface RoomClient {
+interface RoomClient {
   session: RoomSessionResponse | null;
   snapshot: RoomSnapshot | null;
   connectionState: ConnectionState;
@@ -41,6 +42,14 @@ export function useRoomClient(): RoomClient {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectAllowedRef = useRef(true);
 
+  const invalidateSession = useCallback(() => {
+    reconnectAllowedRef.current = false;
+    clearStoredSession();
+    setSession(null);
+    setSnapshot(null);
+    setLatestEvent(null);
+  }, []);
+
   useEffect(() => {
     if (!session) {
       setConnectionState("idle");
@@ -58,8 +67,7 @@ export function useRoomClient(): RoomClient {
       setConnectionState(reconnectAttempts === 0 ? "connecting" : "reconnecting");
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const url = new URL(`${protocol}//${window.location.host}/ws/${session.roomCode}`);
-      url.searchParams.set("token", session.playerToken);
-      const socket = new WebSocket(url);
+      const socket = new WebSocket(url, session.playerToken);
       socketRef.current = socket;
 
       socket.addEventListener("open", () => {
@@ -89,7 +97,10 @@ export function useRoomClient(): RoomClient {
           setLatestEvent(message.event);
         } else if (message.type === "error") {
           setError(message.message);
-          if (message.code === "session_expired") clearStoredSession();
+          if (message.code === "session_expired") {
+            invalidateSession();
+            socket.close(4401, "Session expired");
+          }
         }
       });
 
@@ -98,6 +109,7 @@ export function useRoomClient(): RoomClient {
         if (disposed || !reconnectAllowedRef.current) return;
         reconnectAttempts += 1;
         if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+          invalidateSession();
           setConnectionState("disconnected");
           setError(copy.invalidSession);
           return;
@@ -119,10 +131,10 @@ export function useRoomClient(): RoomClient {
       socketRef.current?.close(1000, "Client navigation");
       socketRef.current = null;
     };
-  }, [session]);
+  }, [session, invalidateSession]);
 
   const activateSession = useCallback((nextSession: RoomSessionResponse) => {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
+    storeSession(nextSession);
     setSnapshot(null);
     setLatestEvent(null);
     setError(null);
@@ -220,7 +232,7 @@ async function requestSession(
   if (!response.ok) {
     throw new Error(readApiMessage(value) ?? copy.unknownError);
   }
-  if (!isSession(value)) {
+  if (!isRoomSessionResponse(value)) {
     throw new Error(copy.unknownError);
   }
   return value;
@@ -231,27 +243,29 @@ function readSession(): RoomSessionResponse | null {
     const stored = sessionStorage.getItem(SESSION_KEY);
     if (!stored) return null;
     const value: unknown = JSON.parse(stored);
-    return isSession(value) ? value : null;
+    if (isRoomSessionResponse(value)) return value;
+    clearStoredSession();
+    return null;
   } catch {
+    clearStoredSession();
     return null;
   }
 }
 
-function clearStoredSession(): void {
-  sessionStorage.removeItem(SESSION_KEY);
+function storeSession(session: RoomSessionResponse): void {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  } catch {
+    // The active tab can still use the room when session storage is unavailable.
+  }
 }
 
-function isSession(value: unknown): value is RoomSessionResponse {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "roomCode" in value &&
-    typeof value.roomCode === "string" &&
-    "playerId" in value &&
-    typeof value.playerId === "string" &&
-    "playerToken" in value &&
-    typeof value.playerToken === "string"
-  );
+function clearStoredSession(): void {
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // Session storage can be unavailable in restricted browser contexts.
+  }
 }
 
 function readApiMessage(value: unknown): string | null {

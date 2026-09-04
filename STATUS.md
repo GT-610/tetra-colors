@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 6 — Completed (workers.dev delivery)
+Post-delivery optimization — Complete
 
 ## Completed
 
@@ -98,10 +98,50 @@ Phase 6 — Completed (workers.dev delivery)
   three `TRY52` sessions passed post-deploy reload checks with empty browser consoles.
 - Completed the current delivery scope on workers.dev after the project owner chose to defer custom
   domain binding and handle it separately later.
+- Audited production, client, protocol, test, dependency, and style usage on the synchronized `main`
+  baseline. Strict unused checks and CSS reference checks passed, and the official npm advisory
+  service reported no vulnerabilities.
+- Removed unused request types, persisted round metadata, public game configuration, event fields,
+  the test-only production state validator and deck-size export, and the unconsumed WebSocket welcome
+  message. State invariant validation now lives in the test suite, heartbeats no longer send full
+  snapshots, and new connections no longer receive duplicate snapshots. Type checking, linting, all
+  24 tests, and whitespace validation pass after the cleanup.
+- Applied draw penalties before declaring a winner, rejected color choices attached to non-wild
+  cards, and transferred host control to a connected human when the prior host leaves or becomes
+  bot-controlled. Focused rule and real Durable Object regressions increased the suite to 27 passing
+  tests.
+- Moved WebSocket tokens out of request URLs and into the negotiated subprotocol, centralized room
+  code and token validation, required JSON media types, and replaced whole-body reads with a strict
+  streaming byte limit. Replaced the unbounded HTTP rate-limit map with a constant-time bounded
+  limiter. Six test files now contain 32 passing tests, including handshake, malformed/oversized
+  body, protocol, limiter-window, and limiter-capacity coverage.
+- Isolated the 250 ms turn-clock refresh to the timer component instead of rerendering the full game
+  table, replaced repeated playable-card scans with a set lookup, and removed snapshot-driven forced
+  component remounts and a trivial lobby memo. Snapshot effects now clear pending actions safely,
+  clipboard feedback timers clean up on unmount, storage failures no longer prevent active play, and
+  persisted sessions use the shared validated contract. Six test files and 33 tests pass after the
+  client cleanup.
+- Removed lobby join/leave and game-finished events after the completion audit confirmed that no
+  production screen consumes them. Authoritative snapshots remain the source of those state changes,
+  and the test suite no longer asserts an event that existed only for tests.
+- Added malformed, oversized, and binary WebSocket message coverage. The additional room scenario
+  exposed shared HTTP-rate-limit state between integration tests, so each room setup now uses an
+  independent reserved test address instead of consuming another test's quota. Six test files now
+  contain 34 passing tests.
+- Ran the updated independent smoke script against a real local Wrangler Worker in room `TBE26`.
+  Two WebSocket clients negotiated the header-based session protocol, entered a three-seat game, and
+  verified private-hand isolation; Wrangler logged two clean `101 Switching Protocols` responses.
+- Re-ran strict unused-symbol checks, CSS reference analysis, removed-symbol and token-URL searches,
+  prohibited tracking/DOM API and trademark scans, dependency advisory checks, and branch diff
+  validation with no outstanding findings.
+- Cleared terminally rejected WebSocket sessions after bounded reconnect attempts while preserving
+  the established cleanup for accepted `session_expired` messages. The bounded rate limiter now
+  removes only expired buckets and rejects new keys rather than evicting active callers. Seven test
+  files now contain 37 passing tests.
 
 ## Remaining
 
-- None for the current scope.
+- External review and merge of the optimization pull request.
 
 ## Known issues
 

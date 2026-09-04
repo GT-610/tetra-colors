@@ -38,8 +38,9 @@ the reconnect window; after that, a computer player takes over the seat.
 
 The client never decides whether an action is legal. The room actor validates every action and sends
 each player a complete personalized snapshot. Another player's private cards are represented only by
-a count. Room tokens are hashed before storage, HTTP and WebSocket inputs are size-limited and
-validated, and creation, joining, and in-room actions are rate-limited.
+a count. Room tokens are carried in the negotiated WebSocket subprotocol instead of request URLs and
+are hashed before storage. HTTP and WebSocket inputs are size-limited and validated, and creation,
+joining, and in-room actions are rate-limited.
 
 Durable Object storage keeps an active room resilient across actor restarts. The room and its
 nicknames are deleted after the room has no connected human for the idle retention period. There is

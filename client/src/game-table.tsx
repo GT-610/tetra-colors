@@ -5,7 +5,7 @@ import type { ClientMessage, RoomEvent, RoomSnapshot } from "../../src/protocol"
 import { copy } from "./copy";
 import type { ConnectionState } from "./room-client";
 
-const COLOR_ORDER: CardColor[] = ["coral", "amber", "teal", "azure"];
+const COLOR_ORDER = ["coral", "amber", "teal", "azure"] as const satisfies readonly CardColor[];
 const TURN_DURATION_MS = 30_000;
 
 interface GameTableProps {
@@ -27,24 +27,23 @@ export function GameTable({
 }: GameTableProps) {
   const [pending, setPending] = useState<"draw" | "pass" | "play" | null>(null);
   const [wildCard, setWildCard] = useState<Card | null>(null);
-  const [now, setNow] = useState(Date.now());
   const game = snapshot.game;
+  const playableCardIds = new Set(game?.playableCardIds ?? []);
 
   useEffect(() => {
     if (error) setPending(null);
   }, [error]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 250);
-    return () => window.clearInterval(timer);
-  }, []);
+    setPending(null);
+    setWildCard(null);
+  }, [snapshot]);
 
   if (!game) return null;
 
   const self = snapshot.players.find((player) => player.id === snapshot.selfId);
   const currentPlayer = snapshot.players.find((player) => player.id === game.currentPlayerId);
   const isSelfTurn = game.currentPlayerId === snapshot.selfId;
-  const remainingMs = Math.max(0, game.turnDeadline - now);
   const waitingForConnection = connectionState !== "connected";
   const actionDisabled = pending !== null || waitingForConnection;
   const opponents = snapshot.players.filter((player) => player.id !== snapshot.selfId);
@@ -109,10 +108,7 @@ export function GameTable({
             {isSelfTurn ? copy.yourTurn : `${currentPlayer?.nickname ?? "玩家"}${copy.theirTurn}`}
           </strong>
         </div>
-        <div className={`turn-timer ${remainingMs <= 5_000 ? "timer-urgent" : ""}`}>
-          <time>{Math.ceil(remainingMs / 1_000)}s</time>
-          <progress max={TURN_DURATION_MS} value={remainingMs} aria-label="回合剩余时间" />
-        </div>
+        <TurnTimer deadline={game.turnDeadline} />
       </section>
 
       <section className="table-center" aria-label="牌桌中央">
@@ -177,7 +173,7 @@ export function GameTable({
 
         <div className="hand-scroller">
           {snapshot.hand.map((card) => {
-            const playable = game.playableCardIds.includes(card.id);
+            const playable = playableCardIds.has(card.id);
             const isDrawn = game.drawnCardId === card.id;
             return (
               <button
@@ -220,6 +216,23 @@ export function GameTable({
         <ColorDialog card={wildCard} onChoose={playWild} onClose={() => setWildCard(null)} />
       ) : null}
     </main>
+  );
+}
+
+function TurnTimer({ deadline }: { deadline: number }) {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const remainingMs = Math.max(0, deadline - now);
+  return (
+    <div className={`turn-timer ${remainingMs <= 5_000 ? "timer-urgent" : ""}`}>
+      <time>{Math.ceil(remainingMs / 1_000)}s</time>
+      <progress max={TURN_DURATION_MS} value={remainingMs} aria-label="回合剩余时间" />
+    </div>
   );
 }
 
@@ -355,11 +368,8 @@ function EventToast({ event, snapshot }: { event: RoomEvent; snapshot: RoomSnaps
   if (event.type === "card-played") text = `${playerName}打出${cardLabel(event.card)}`;
   else if (event.type === "cards-drawn") text = `${playerName}抽了 ${event.count} 张牌`;
   else if (event.type === "turn-timed-out") text = `${playerName}回合超时，已自动行动`;
-  else if (event.type === "player-joined") text = `${event.nickname}加入房间`;
-  else if (event.type === "player-left") text = `${playerName}离开房间`;
   else if (event.type === "player-reconnected") text = `${playerName}已重新连接`;
-  else if (event.type === "player-became-bot") text = `${playerName}已由电脑托管`;
-  else text = "本局已经结束";
+  else text = `${playerName}已由电脑托管`;
   return (
     <div className="event-toast" role="status">
       {text}

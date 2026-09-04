@@ -1,8 +1,11 @@
 import { isCardColor } from "./logic/deck";
-import type { BotDifficulty, Card, CardColor, GameConfig, TurnDirection } from "./logic/types";
+import type { BotDifficulty, Card, CardColor, TurnDirection } from "./logic/types";
 
 export const MAX_NICKNAME_LENGTH = 20;
+export const ROOM_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 export const ROOM_CODE_LENGTH = 5;
+const ROOM_CODE_PATTERN = new RegExp(`^[${ROOM_CODE_ALPHABET}]{${ROOM_CODE_LENGTH}}$`);
+const PLAYER_TOKEN_PATTERN = /^[a-f0-9]{64}$/;
 
 export type RoomPhase = "lobby" | "playing" | "finished";
 
@@ -26,7 +29,6 @@ export interface PublicGameView {
   playableCardIds: string[];
   drawnCardId: string | null;
   winnerId: string | null;
-  config: GameConfig;
 }
 
 export interface RoomSnapshot {
@@ -51,17 +53,13 @@ export type ClientMessage =
   | { type: "room.leave" };
 
 export type RoomEvent =
-  | { type: "player-joined"; playerId: string; nickname: string }
-  | { type: "player-left"; playerId: string }
   | { type: "player-reconnected"; playerId: string }
   | { type: "player-became-bot"; playerId: string }
-  | { type: "card-played"; playerId: string; card: Card; chosenColor: CardColor }
+  | { type: "card-played"; playerId: string; card: Card }
   | { type: "cards-drawn"; playerId: string; count: number }
-  | { type: "turn-timed-out"; playerId: string }
-  | { type: "game-finished"; winnerId: string };
+  | { type: "turn-timed-out"; playerId: string };
 
 export type ServerMessage =
-  | { type: "welcome"; playerId: string; playerToken: string; roomCode: string }
   | { type: "snapshot"; snapshot: RoomSnapshot }
   | { type: "event"; event: RoomEvent }
   | { type: "error"; code: ServerErrorCode; message: string };
@@ -77,15 +75,6 @@ export type ServerErrorCode =
   | "invalid_action"
   | "session_expired"
   | "internal_error";
-
-export interface CreateRoomRequest {
-  nickname: string;
-}
-
-export interface JoinRoomRequest {
-  nickname: string;
-  playerToken?: string;
-}
 
 export interface RoomSessionResponse {
   roomCode: string;
@@ -141,6 +130,27 @@ export function normalizeNickname(value: unknown): string | null {
   }
 
   return normalized;
+}
+
+export function normalizeRoomCode(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toUpperCase();
+  return ROOM_CODE_PATTERN.test(normalized) ? normalized : null;
+}
+
+export function isPlayerToken(value: unknown): value is string {
+  return typeof value === "string" && PLAYER_TOKEN_PATTERN.test(value);
+}
+
+export function isRoomSessionResponse(value: unknown): value is RoomSessionResponse {
+  return (
+    isRecord(value) &&
+    typeof value.roomCode === "string" &&
+    normalizeRoomCode(value.roomCode) === value.roomCode &&
+    typeof value.playerId === "string" &&
+    value.playerId.length > 0 &&
+    isPlayerToken(value.playerToken)
+  );
 }
 
 export function isBotDifficulty(value: unknown): value is BotDifficulty {

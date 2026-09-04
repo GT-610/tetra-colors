@@ -68,11 +68,9 @@ export type GameErrorCode =
   | "draw_required";
 
 export type GameEvent =
-  | { type: "card-played"; playerId: string; card: Card; chosenColor: CardColor }
-  | { type: "cards-drawn"; playerId: string; count: number; reason: "turn" | "penalty" }
-  | { type: "discard-recycled"; count: number }
-  | { type: "turn-started"; playerId: string; turnNumber: number }
-  | { type: "game-finished"; winnerId: string };
+  | { type: "card-played"; playerId: string; card: Card }
+  | { type: "cards-drawn"; playerId: string; count: number }
+  | { type: "turn-started" };
 
 export type GameResult =
   | { ok: true; state: GameState; events: GameEvent[] }

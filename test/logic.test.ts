@@ -6,19 +6,20 @@ import {
   CARD_COLORS,
   canPlayCard,
   createDeck,
-  DECK_SIZE,
   getPlayableCards,
   shuffleCards,
   startGame,
-  validateGameState,
 } from "../src/logic";
+import { validateGameState } from "./helpers/game-state";
+
+const EXPECTED_DECK_SIZE = 108;
 
 describe("deck", () => {
   it("builds a complete deck with unique identifiers", () => {
     const deck = createDeck();
 
-    expect(deck).toHaveLength(DECK_SIZE);
-    expect(new Set(deck.map((card) => card.id)).size).toBe(DECK_SIZE);
+    expect(deck).toHaveLength(EXPECTED_DECK_SIZE);
+    expect(new Set(deck.map((card) => card.id)).size).toBe(EXPECTED_DECK_SIZE);
     expect(deck.filter((card) => card.kind === "wild")).toHaveLength(4);
     expect(deck.filter((card) => card.kind === "wild-draw-four")).toHaveLength(4);
 
@@ -169,6 +170,55 @@ describe("game rules", () => {
     }
   });
 
+  it("applies a draw penalty before finishing the game", () => {
+    const drawTwo: Card = { id: "winning-draw-two", kind: "draw-two", color: "coral" };
+    const state = testState({
+      players: [
+        { id: "a", hand: [drawTwo] },
+        { id: "b", hand: [numberCard("b-card", "azure", 2)] },
+      ],
+      drawPile: [numberCard("draw-1", "teal", 5), numberCard("draw-2", "azure", 6)],
+      discardPile: [numberCard("top", "coral", 3)],
+      currentColor: "coral",
+    });
+
+    const result = applyGameAction(
+      state,
+      "a",
+      { type: "play-card", cardId: drawTwo.id },
+      seededRandom(2),
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.state.phase).toBe("finished");
+      expect(result.state.winnerId).toBe("a");
+      expect(result.state.players[1]?.hand).toHaveLength(3);
+      expect(result.events.map((event) => event.type)).toEqual(["card-played", "cards-drawn"]);
+    }
+  });
+
+  it("rejects a color choice for a non-wild card", () => {
+    const playable = numberCard("playable", "coral", 8);
+    const state = testState({
+      players: [
+        { id: "a", hand: [playable, numberCard("keep", "teal", 1)] },
+        { id: "b", hand: [numberCard("b-card", "azure", 2)] },
+      ],
+      discardPile: [numberCard("top", "coral", 3)],
+      currentColor: "coral",
+    });
+
+    expect(
+      applyGameAction(
+        state,
+        "a",
+        { type: "play-card", cardId: playable.id, chosenColor: "teal" },
+        seededRandom(2),
+      ),
+    ).toEqual({ ok: false, error: "color_not_allowed" });
+  });
+
   it("makes reverse act as a skip with two players", () => {
     const reverse: Card = { id: "reverse", kind: "reverse", color: "coral" };
     const state = testState({
@@ -212,7 +262,6 @@ describe("game rules", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.state.discardPile.map((card) => card.id)).toEqual(["top"]);
-      expect(result.events).toContainEqual({ type: "discard-recycled", count: 2 });
       expect(result.state.players[0]?.hand).toHaveLength(2);
     }
   });

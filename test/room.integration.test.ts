@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { RoomSessionResponse, RoomSnapshot, ServerMessage } from "../src/protocol";
 
 const sockets: WebSocket[] = [];
+let createRequestSequence = 0;
 
 interface StoredRoomHarness {
   phase: "lobby" | "playing" | "finished";
@@ -36,6 +37,19 @@ afterEach(() => {
 });
 
 describe("RoomDO integration", () => {
+  it("rejects WebSocket tokens supplied in the request URL", async () => {
+    const host = await createRoom("鉴权测试");
+    const response = await exports.default.fetch(
+      new Request(
+        `https://example.com/ws/${host.roomCode}?token=${encodeURIComponent(host.playerToken)}`,
+        { headers: { Upgrade: "websocket" } },
+      ),
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({ error: "session_expired" });
+  });
+
   it("creates, joins, reconnects, and enforces room capacity", async () => {
     const host = await createRoom("房主");
     expect(host.roomCode).toMatch(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}$/);
@@ -160,6 +174,34 @@ describe("RoomDO integration", () => {
     );
 
     expect(Date.now() - startedAt).toBeLessThan(4_000);
+  });
+
+  it("transfers host control when the host leaves an active game", async () => {
+    const host = await createRoom("原房主");
+    const guest = await joinRoom(host.roomCode, "新房主");
+    const hostConnection = await connect(host);
+    const guestConnection = await connect(guest);
+
+    await snapshotFrom(
+      hostConnection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
+    await snapshotFrom(
+      guestConnection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
+
+    hostConnection.socket.send(JSON.stringify({ type: "lobby.start" }));
+    await snapshotFrom(guestConnection.inbox, (snapshot) => snapshot.phase === "playing");
+
+    hostConnection.socket.send(JSON.stringify({ type: "room.leave" }));
+    const transferred = await snapshotFrom(
+      guestConnection.inbox,
+      (snapshot) => snapshot.phase === "playing" && snapshot.hostId === guest.playerId,
+    );
+
+    expect(transferred.players.find((player) => player.id === host.playerId)?.isBot).toBe(true);
+    expect(transferred.players.find((player) => player.id === guest.playerId)?.isBot).toBe(false);
   });
 
   it("survives hibernation and completes the disconnect, reconnect, and rematch lifecycle", async () => {
@@ -290,6 +332,21 @@ describe("RoomDO integration", () => {
 
     await expectServerError(connection.inbox, "rate_limited");
   });
+
+  it("rejects malformed, oversized, and binary WebSocket messages", async () => {
+    const host = await createRoom("消息边界测试");
+    const connection = await connect(host);
+    await connection.inbox.waitFor((message) => message.type === "snapshot");
+
+    connection.socket.send("{");
+    await expectServerError(connection.inbox, "invalid_message");
+
+    connection.socket.send(JSON.stringify({ type: "heartbeat", padding: "x".repeat(8_192) }));
+    await expectServerError(connection.inbox, "invalid_message");
+
+    connection.socket.send(new Uint8Array([1, 2, 3]).buffer);
+    await expectServerError(connection.inbox, "invalid_message");
+  });
 });
 
 class MessageInbox {
@@ -338,7 +395,10 @@ class MessageInbox {
 async function createRoom(nickname: string): Promise<RoomSessionResponse> {
   const response = await exports.default.fetch("https://example.com/api/rooms", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "CF-Connecting-IP": `198.51.100.${++createRequestSequence}`,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({ nickname }),
   });
   expect(response.status).toBe(201);
@@ -365,19 +425,21 @@ function joinRoomResponse(roomCode: string, nickname: string, playerToken?: stri
 
 async function connect(session: RoomSessionResponse) {
   const response = await exports.default.fetch(
-    new Request(
-      `https://example.com/ws/${session.roomCode}?token=${encodeURIComponent(session.playerToken)}`,
-      { headers: { Upgrade: "websocket" } },
-    ),
+    new Request(`https://example.com/ws/${session.roomCode}`, {
+      headers: {
+        Upgrade: "websocket",
+        "Sec-WebSocket-Protocol": session.playerToken,
+      },
+    }),
   );
   expect(response.status).toBe(101);
+  expect(response.headers.get("Sec-WebSocket-Protocol")).toBe(session.playerToken);
   const socket = response.webSocket;
   if (!socket) throw new Error("WebSocket response did not include a client socket");
 
   const inbox = new MessageInbox(socket);
   sockets.push(socket);
   socket.accept();
-  await inbox.waitFor((message) => message.type === "welcome");
   return { socket, inbox };
 }
 
