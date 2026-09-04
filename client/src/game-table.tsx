@@ -1,12 +1,41 @@
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import type { Card, CardColor } from "../../src/logic";
 import type { ClientMessage, RoomEvent, RoomSnapshot } from "../../src/protocol";
 import { copy } from "./copy";
+import { arrangeOpponentSeats } from "./game-layout";
 import type { ConnectionState } from "./room-client";
 
 const COLOR_ORDER = ["coral", "amber", "teal", "azure"] as const satisfies readonly CardColor[];
+const CARD_FLIGHT_MS = 560;
 const TURN_DURATION_MS = 30_000;
+
+interface CardFlight {
+  key: number;
+  card: Card;
+  source: "self" | "opponent";
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  fromScale: number;
+  width: number;
+}
+
+interface SeatStyle extends CSSProperties {
+  "--seat-left": string;
+  "--seat-top": string;
+}
+
+interface FlightStyle extends CSSProperties {
+  "--flight-duration": string;
+  "--flight-from-scale": string;
+  "--flight-from-x": string;
+  "--flight-from-y": string;
+  "--flight-to-x": string;
+  "--flight-to-y": string;
+  "--flight-width": string;
+}
 
 interface GameTableProps {
   snapshot: RoomSnapshot;
@@ -27,6 +56,12 @@ export function GameTable({
 }: GameTableProps) {
   const [pending, setPending] = useState<"draw" | "pass" | "play" | null>(null);
   const [wildCard, setWildCard] = useState<Card | null>(null);
+  const [cardFlight, setCardFlight] = useState<CardFlight | null>(null);
+  const stageRef = useRef<HTMLElement | null>(null);
+  const discardRef = useRef<HTMLDivElement | null>(null);
+  const opponentRefs = useRef(new Map<string, HTMLElement>());
+  const pendingCardOriginRef = useRef<DOMRect | null>(null);
+  const flightSequenceRef = useRef(0);
   const game = snapshot.game;
   const playableCardIds = new Set(game?.playableCardIds ?? []);
 
@@ -39,6 +74,39 @@ export function GameTable({
     setWildCard(null);
   }, [snapshot]);
 
+  useEffect(() => {
+    setCardFlight(null);
+    if (latestEvent?.type !== "card-played") return;
+
+    const stageBounds = stageRef.current?.getBoundingClientRect();
+    const targetBounds = discardRef.current?.getBoundingClientRect();
+    const isSelf = latestEvent.playerId === snapshot.selfId;
+    const sourceBounds = isSelf
+      ? pendingCardOriginRef.current
+      : opponentRefs.current.get(latestEvent.playerId)?.getBoundingClientRect();
+    if (isSelf) pendingCardOriginRef.current = null;
+    if (!stageBounds || !targetBounds || !sourceBounds) return;
+
+    const key = flightSequenceRef.current + 1;
+    flightSequenceRef.current = key;
+    setCardFlight({
+      key,
+      card: latestEvent.card,
+      source: isSelf ? "self" : "opponent",
+      fromX: sourceBounds.left + sourceBounds.width / 2 - stageBounds.left,
+      fromY: sourceBounds.top + sourceBounds.height / 2 - stageBounds.top,
+      toX: targetBounds.left + targetBounds.width / 2 - stageBounds.left,
+      toY: targetBounds.top + targetBounds.height / 2 - stageBounds.top,
+      fromScale: isSelf ? Math.min(1, sourceBounds.width / targetBounds.width) : 0.48,
+      width: targetBounds.width,
+    });
+
+    const timer = window.setTimeout(() => {
+      setCardFlight((current) => (current?.key === key ? null : current));
+    }, CARD_FLIGHT_MS);
+    return () => window.clearTimeout(timer);
+  }, [latestEvent, snapshot.selfId]);
+
   if (!game) return null;
 
   const self = snapshot.players.find((player) => player.id === snapshot.selfId);
@@ -46,14 +114,19 @@ export function GameTable({
   const isSelfTurn = game.currentPlayerId === snapshot.selfId;
   const waitingForConnection = connectionState !== "connected";
   const actionDisabled = pending !== null || waitingForConnection;
-  const opponents = snapshot.players.filter((player) => player.id !== snapshot.selfId);
+  const opponentSeats = arrangeOpponentSeats(snapshot.players, snapshot.selfId);
 
-  const playCard = (card: Card) => {
+  const playCard = (card: Card, source: HTMLElement) => {
+    const sourceBounds = source.getBoundingClientRect();
     if (card.kind === "wild" || card.kind === "wild-draw-four") {
+      pendingCardOriginRef.current = sourceBounds;
       setWildCard(card);
       return;
     }
-    if (onSend({ type: "game.play-card", cardId: card.id })) setPending("play");
+    if (onSend({ type: "game.play-card", cardId: card.id })) {
+      pendingCardOriginRef.current = sourceBounds;
+      setPending("play");
+    }
   };
 
   const playWild = (chosenColor: CardColor) => {
@@ -83,24 +156,6 @@ export function GameTable({
         </div>
       </header>
 
-      <section className="opponent-row" aria-label="其他玩家">
-        {opponents.map((player, index) => (
-          <article
-            className={`opponent-chip ${player.id === game.currentPlayerId ? "active-player" : ""}`}
-            key={player.id}
-          >
-            <span className={`opponent-symbol symbol-${COLOR_ORDER[index % COLOR_ORDER.length]}`} />
-            <div>
-              <strong>{player.nickname}</strong>
-              <span>
-                {player.handCount} {copy.cards}
-              </span>
-            </div>
-            {player.isBot ? <em>{copy.bot}</em> : null}
-          </article>
-        ))}
-      </section>
-
       <section className="turn-status" aria-live="polite">
         <div>
           <span className={`turn-pulse ${isSelfTurn ? "self-turn" : ""}`} aria-hidden="true" />
@@ -111,33 +166,67 @@ export function GameTable({
         <TurnTimer deadline={game.turnDeadline} />
       </section>
 
-      <section className="table-center" aria-label="牌桌中央">
-        <div className="direction-label">
-          <span>{game.direction === 1 ? "↻" : "↺"}</span>
-          {game.direction === 1 ? copy.directionClockwise : copy.directionCounterClockwise}
-        </div>
+      <section className="table-stage" aria-label="牌桌" ref={stageRef}>
+        {cardFlight ? <PlayedCardFlight flight={cardFlight} /> : null}
 
-        <button
-          className="pile-button draw-pile"
-          type="button"
-          disabled={!isSelfTurn || game.drawnCardId !== null || actionDisabled}
-          onClick={() => {
-            if (onSend({ type: "game.draw-card" })) setPending("draw");
-          }}
-          aria-label={`${copy.drawCard}，剩余 ${game.drawPileCount} 张`}
-        >
-          <CardBack />
-          <span>{game.drawPileCount}</span>
-        </button>
+        <section className="opponent-arc" aria-label="其他玩家">
+          {opponentSeats.map(({ player, left, top }, index) => (
+            <article
+              className={`opponent-chip ${player.id === game.currentPlayerId ? "active-player" : ""}`}
+              key={player.id}
+              ref={(element) => {
+                if (element) opponentRefs.current.set(player.id, element);
+                else opponentRefs.current.delete(player.id);
+              }}
+              style={opponentSeatStyle(left, top)}
+            >
+              <span
+                className={`opponent-symbol symbol-${COLOR_ORDER[index % COLOR_ORDER.length]}`}
+              />
+              <div>
+                <strong>{player.nickname}</strong>
+                <span>
+                  {player.handCount} {copy.cards}
+                  {player.isBot ? ` · ${copy.bot}` : ""}
+                </span>
+              </div>
+            </article>
+          ))}
+        </section>
 
-        <div className="discard-pile" role="img" aria-label={`弃牌：${cardLabel(game.topDiscard)}`}>
-          <CardFace card={game.topDiscard} />
-        </div>
+        <section className="table-center" aria-label="牌桌中央">
+          <div className="direction-label">
+            <span>{game.direction === 1 ? "↻" : "↺"}</span>
+            {game.direction === 1 ? copy.directionClockwise : copy.directionCounterClockwise}
+          </div>
 
-        <div className={`color-indicator indicator-${game.currentColor}`}>
-          <span>{copy.currentColor}</span>
-          <strong>{copy.colors[game.currentColor]}</strong>
-        </div>
+          <button
+            className="pile-button draw-pile"
+            type="button"
+            disabled={!isSelfTurn || game.drawnCardId !== null || actionDisabled}
+            onClick={() => {
+              if (onSend({ type: "game.draw-card" })) setPending("draw");
+            }}
+            aria-label={`${copy.drawCard}，剩余 ${game.drawPileCount} 张`}
+          >
+            <CardBack />
+            <span>{game.drawPileCount}</span>
+          </button>
+
+          <div
+            className="discard-pile"
+            ref={discardRef}
+            role="img"
+            aria-label={`弃牌：${cardLabel(game.topDiscard)}`}
+          >
+            <CardFace card={game.topDiscard} />
+          </div>
+
+          <div className={`color-indicator indicator-${game.currentColor}`}>
+            <span>{copy.currentColor}</span>
+            <strong>{copy.colors[game.currentColor]}</strong>
+          </div>
+        </section>
       </section>
 
       {latestEvent ? (
@@ -181,7 +270,7 @@ export function GameTable({
                 type="button"
                 key={card.id}
                 disabled={!isSelfTurn || !playable || actionDisabled}
-                onClick={() => playCard(card)}
+                onClick={(event) => playCard(card, event.currentTarget)}
                 aria-label={`打出${cardLabel(card)}`}
               >
                 <CardFace card={card} />
@@ -213,10 +302,42 @@ export function GameTable({
       ) : null}
 
       {wildCard ? (
-        <ColorDialog card={wildCard} onChoose={playWild} onClose={() => setWildCard(null)} />
+        <ColorDialog
+          card={wildCard}
+          onChoose={playWild}
+          onClose={() => {
+            pendingCardOriginRef.current = null;
+            setWildCard(null);
+          }}
+        />
       ) : null}
     </main>
   );
+}
+
+function PlayedCardFlight({ flight }: { flight: CardFlight }) {
+  const style: FlightStyle = {
+    "--flight-duration": `${CARD_FLIGHT_MS}ms`,
+    "--flight-from-scale": String(flight.fromScale),
+    "--flight-from-x": `${flight.fromX}px`,
+    "--flight-from-y": `${flight.fromY}px`,
+    "--flight-to-x": `${flight.toX}px`,
+    "--flight-to-y": `${flight.toY}px`,
+    "--flight-width": `${flight.width}px`,
+  };
+
+  return (
+    <div className={`card-flight card-flight-${flight.source}`} style={style} aria-hidden="true">
+      <CardFace card={flight.card} />
+    </div>
+  );
+}
+
+function opponentSeatStyle(left: number, top: number): SeatStyle {
+  return {
+    "--seat-left": `${left}%`,
+    "--seat-top": `${top}%`,
+  };
 }
 
 function TurnTimer({ deadline }: { deadline: number }) {

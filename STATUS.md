@@ -142,6 +142,11 @@ Post-delivery optimization — Complete
   favicon, and made room-event notices expire after three seconds. Verified the entry and lobby at
   1920 × 960 without side gutters or horizontal overflow; type checking, linting, the production
   build, and 38 tests pass.
+- Replaced the flat opponent row with perspective-ordered seats distributed along an invisible
+  upper arc, added measured card flights from the acting hand or opponent marker to the discard
+  pile, and raised playable cards at rest. Six-player browser checks at 1920 × 960, 390 × 844, and
+  320 × 720 keep every seat and the table center visible without seat collisions or page overflow;
+  opponent card flights remain below their player markers. Eight test files now contain 40 tests.
 
 ## Remaining
 
