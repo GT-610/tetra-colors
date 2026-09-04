@@ -75,6 +75,27 @@ Phase 6 — Awaiting custom domain
 - Deployed the hardened production build as Cloudflare version
   `8980becc-a56b-4ae0-8adf-4d7cb24441cc`, then reloaded all three game clients with identical
   results and no browser console errors.
+- Expanded the Workers integration suite to cover hibernation wake-up, forced turn timeout,
+  reconnect-grace conversion, a complete alarm-driven bot game, token-based seat recovery,
+  rematches, and idle room deletion. All 24 tests pass, and the full lifecycle case passed three
+  consecutive focused runs.
+- Fixed the alarm fallback so a no-op reconnect expiry pass no longer postpones the scheduled bot
+  action. Re-ran the independent local Wrangler smoke test with two WebSockets, three seats, and
+  hidden-hand verification.
+- Deployed the audited server as Cloudflare version `90fbd504-11d6-4505-93e5-a15dcca9e903`.
+- Verified the production alarm fallback in room `F8859`: while the only human was offline, the bot
+  legally played from 9 to 8 cards and advanced the game before the same tab reclaimed its seat.
+- Repeated the full three-human production game on the final version in room `TRY52`. All clients
+  agreed on 白鹭 0 cards, 赤隼 3 cards, and 青鸟 4 cards, with no console errors. Final screenshots
+  are `/private/tmp/tetra-colors-final-workers-host.png` and
+  `/private/tmp/tetra-colors-final-workers-desktop.png`.
+- Refreshed room activity on abrupt disconnects so the 30-second reconnect grace cannot be bypassed
+  by an older idle timestamp; the lifecycle regression now explicitly covers this ordering.
+- Removed the remaining unused Phase 3 placeholder copy and CSS after a source-to-style reference
+  audit found no other obsolete client selectors.
+- Deployed the final workers.dev candidate as Cloudflare version
+  `4747b923-bc52-49c0-9519-2b1478363065`. The health endpoint, cached asset security headers, and all
+  three `TRY52` sessions passed post-deploy reload checks with empty browser consoles.
 
 ## Remaining
 
