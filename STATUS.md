@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Post-delivery interaction refinement — Verified, pull request pending
+Post-delivery interaction refinement — Pull request open
 
 ## Completed
 
@@ -176,7 +176,7 @@ Post-delivery interaction refinement — Verified, pull request pending
 
 ## Remaining
 
-- Open the interaction-refinement pull request and complete external review and merge.
+- Complete external review and merge for pull request #3.
 
 ## Known issues
 
