@@ -155,11 +155,16 @@ Post-delivery interaction refinement — In progress
   phase-aware exit confirmations, enabled room lookup from a valid room code, expanded the turn
   timer across the status banner, and randomized bot actions over an inclusive 1–5 second range.
   Type checking, linting, the production build, and 46 tests pass.
+- Added authoritative visual-transition windows that reject actions until animations finish, delay
+  the next turn clock and bot schedule accordingly, and persist across Durable Object hibernation.
+  Skip cards now retain the skipped player in game state until the following acting player completes
+  an action, with paired skip/unskip events for consecutive skips. The shared half-flight deal
+  timing, state invariants, protocol views, and RoomDO behavior are covered by 51 passing tests.
 
 ## Remaining
 
-- Add synchronized draw/deal, card-reveal, and skip-status animations while freezing visible game
-  state and player actions until each transition completes.
+- Add synchronized client draw/deal, card-reveal, and skip-status animations while freezing the
+  rendered snapshot until each transition completes.
 - Complete desktop and mobile browser regression, then open the interaction-refinement pull request.
 
 ## Known issues

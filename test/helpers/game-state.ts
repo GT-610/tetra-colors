@@ -38,6 +38,12 @@ export function validateGameState(state: GameState): string[] {
       issues.push("drawn card is not held by the current player");
     }
   }
+  if (
+    state.skippedPlayerId &&
+    !state.players.some((player) => player.id === state.skippedPlayerId)
+  ) {
+    issues.push("skipped player is not part of the game");
+  }
 
   return issues;
 }

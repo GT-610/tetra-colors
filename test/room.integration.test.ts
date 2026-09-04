@@ -12,6 +12,7 @@ interface StoredRoomHarness {
   lastActivity: number;
   turnDeadline: number | null;
   scheduledBotAt: number | null;
+  actionBlockedUntil: number | null;
   players: Array<{
     id: string;
     connected: boolean;
@@ -239,6 +240,29 @@ describe("RoomDO integration", () => {
     const stub = env.ROOMS.getByName(host.roomCode);
     await waitForRoomDeletion(stub);
     expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
+  });
+
+  it("rejects player actions while a visual transition is in progress", async () => {
+    const host = await createRoom("动画发起者");
+    await joinRoom(host.roomCode, "等待玩家");
+    const connection = await connect(host);
+    await snapshotFrom(
+      connection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
+    connection.socket.send(JSON.stringify({ type: "lobby.start" }));
+    await snapshotFrom(connection.inbox, (snapshot) => snapshot.phase === "playing");
+
+    connection.socket.send(JSON.stringify({ type: "game.draw-card" }));
+    connection.socket.send(JSON.stringify({ type: "game.draw-card" }));
+    const blocked = await connection.inbox.waitFor(
+      (message) =>
+        message.type === "error" &&
+        message.code === "invalid_action" &&
+        message.message === "请等待当前动画结束",
+    );
+
+    expect(blocked).toMatchObject({ type: "error", code: "invalid_action" });
   });
 
   it("survives hibernation and completes the disconnect, reconnect, and rematch lifecycle", async () => {

@@ -170,6 +170,86 @@ describe("game rules", () => {
     }
   });
 
+  it("keeps a skipped player marked until the following player acts", () => {
+    const skip: Card = { id: "skip", kind: "skip", color: "coral" };
+    const followUp = numberCard("follow-up", "coral", 7);
+    const state = testState({
+      players: [
+        { id: "a", hand: [skip, numberCard("keep", "teal", 1)] },
+        { id: "b", hand: [numberCard("b-card", "azure", 2)] },
+        { id: "c", hand: [followUp, numberCard("c-card", "amber", 3)] },
+      ],
+      discardPile: [numberCard("top", "coral", 3)],
+      currentColor: "coral",
+    });
+
+    const skipped = applyGameAction(
+      state,
+      "a",
+      { type: "play-card", cardId: skip.id },
+      seededRandom(2),
+    );
+    expect(skipped.ok).toBe(true);
+    if (!skipped.ok) return;
+    expect(skipped.state.skippedPlayerId).toBe("b");
+    expect(skipped.state.players[skipped.state.turnIndex]?.id).toBe("c");
+    expect(skipped.events.map((event) => event.type)).toEqual([
+      "card-played",
+      "player-skipped",
+      "turn-started",
+    ]);
+
+    const cleared = applyGameAction(
+      skipped.state,
+      "c",
+      { type: "play-card", cardId: followUp.id },
+      seededRandom(3),
+    );
+    expect(cleared.ok).toBe(true);
+    if (cleared.ok) {
+      expect(cleared.state.skippedPlayerId).toBeNull();
+      expect(cleared.events.map((event) => event.type)).toEqual([
+        "player-unskipped",
+        "card-played",
+        "turn-started",
+      ]);
+    }
+  });
+
+  it("clears and reapplies skip state during consecutive skip cards", () => {
+    const skip: Card = { id: "next-skip", kind: "skip", color: "coral" };
+    const state = testState({
+      players: [
+        { id: "a", hand: [numberCard("a-card", "teal", 1)] },
+        { id: "b", hand: [numberCard("b-card", "azure", 2)] },
+        { id: "c", hand: [skip, numberCard("keep", "amber", 3)] },
+        { id: "d", hand: [numberCard("d-card", "teal", 4)] },
+      ],
+      discardPile: [numberCard("top", "coral", 3)],
+      currentColor: "coral",
+      turnIndex: 2,
+      skippedPlayerId: "b",
+    });
+
+    const result = applyGameAction(
+      state,
+      "c",
+      { type: "play-card", cardId: skip.id },
+      seededRandom(2),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.state.skippedPlayerId).toBe("d");
+      expect(result.state.players[result.state.turnIndex]?.id).toBe("a");
+      expect(result.events.map((event) => event.type)).toEqual([
+        "player-unskipped",
+        "card-played",
+        "player-skipped",
+        "turn-started",
+      ]);
+    }
+  });
+
   it("applies a draw penalty before finishing the game", () => {
     const drawTwo: Card = { id: "winning-draw-two", kind: "draw-two", color: "coral" };
     const state = testState({
@@ -305,6 +385,7 @@ function testState(overrides: Partial<GameState>): GameState {
     turnIndex: 0,
     direction: 1,
     drawnCardId: null,
+    skippedPlayerId: null,
     winnerId: null,
     turnNumber: 1,
     config: {

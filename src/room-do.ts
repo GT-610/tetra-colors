@@ -15,6 +15,7 @@ import {
   type ServerMessage,
 } from "./protocol";
 import { botDelayMs } from "./room-timing";
+import { buildTransitionTimeline } from "./transition-timing";
 
 const ROOM_STORAGE_KEY = "room";
 const MAX_PLAYERS = 6;
@@ -44,6 +45,7 @@ interface RoomData {
   lastActivity: number;
   turnDeadline: number | null;
   scheduledBotAt: number | null;
+  actionBlockedUntil: number | null;
 }
 
 interface SocketAttachment {
@@ -65,6 +67,10 @@ export class RoomDO extends DurableObject<Env> {
     super(ctx, env);
     this.ready = this.ctx.blockConcurrencyWhile(async () => {
       this.room = (await this.ctx.storage.get<RoomData>(ROOM_STORAGE_KEY)) ?? null;
+      if (this.room) {
+        this.room.actionBlockedUntil ??= null;
+        if (this.room.game) this.room.game.skippedPlayerId ??= null;
+      }
       this.reconcileConnections();
     });
   }
@@ -218,6 +224,7 @@ export class RoomDO extends DurableObject<Env> {
       lastActivity: now,
       turnDeadline: null,
       scheduledBotAt: null,
+      actionBlockedUntil: null,
     };
     await this.persist();
 
@@ -394,6 +401,7 @@ export class RoomDO extends DurableObject<Env> {
     );
     this.room.phase = "playing";
     this.room.turnDeadline = Date.now() + TURN_DURATION_MS;
+    this.room.actionBlockedUntil = null;
     this.scheduleBotIfNeeded();
     await this.persistAndBroadcast([]);
   }
@@ -411,6 +419,10 @@ export class RoomDO extends DurableObject<Env> {
     const player = this.room.players.find((candidate) => candidate.id === playerId);
     if (!player || player.controlledByBot) {
       this.sendError(socket, "invalid_action", "当前座位由电脑托管");
+      return;
+    }
+    if (this.room.actionBlockedUntil !== null && this.room.actionBlockedUntil > Date.now()) {
+      this.sendError(socket, "invalid_action", "请等待当前动画结束");
       return;
     }
 
@@ -591,13 +603,19 @@ export class RoomDO extends DurableObject<Env> {
       this.room.phase = "finished";
       this.room.turnDeadline = null;
       this.room.scheduledBotAt = null;
+      this.room.actionBlockedUntil = null;
     }
   }
 
   private updateTurnSchedule(events: readonly GameEvent[]): void {
     if (!this.room?.game || this.room.phase !== "playing") return;
+    const transitionDuration = buildTransitionTimeline(events).durationMs;
+    const now = Date.now();
+    this.room.actionBlockedUntil = transitionDuration > 0 ? now + transitionDuration : null;
     if (events.some((event) => event.type === "turn-started")) {
-      this.room.turnDeadline = Date.now() + TURN_DURATION_MS;
+      this.room.turnDeadline = now + transitionDuration + TURN_DURATION_MS;
+    } else if (this.room.turnDeadline !== null) {
+      this.room.turnDeadline += transitionDuration;
     }
     this.scheduleBotIfNeeded();
   }
@@ -609,8 +627,9 @@ export class RoomDO extends DurableObject<Env> {
     }
     const gamePlayer = this.room.game.players[this.room.game.turnIndex];
     const roomPlayer = this.room.players.find((player) => player.id === gamePlayer?.id);
+    const scheduleFrom = Math.max(Date.now(), this.room.actionBlockedUntil ?? 0);
     this.room.scheduledBotAt =
-      roomPlayer && isBotControlled(roomPlayer) ? Date.now() + botDelayMs(runtimeRandom) : null;
+      roomPlayer && isBotControlled(roomPlayer) ? scheduleFrom + botDelayMs(runtimeRandom) : null;
   }
 
   private requireHost(socket: WebSocket, playerId: string): boolean {
@@ -785,11 +804,13 @@ export class RoomDO extends DurableObject<Env> {
               drawPileCount: game.drawPile.length,
               turnNumber: game.turnNumber,
               turnDeadline: this.room.turnDeadline ?? 0,
+              actionBlockedUntil: this.room.actionBlockedUntil ?? 0,
               playableCardIds:
                 currentPlayer.id === playerId
                   ? getPlayableCards(game, playerId).map((card) => card.id)
                   : [],
               drawnCardId: currentPlayer.id === playerId ? game.drawnCardId : null,
+              skippedPlayerId: game.skippedPlayerId,
               winnerId: game.winnerId,
             }
           : null,
@@ -888,6 +909,8 @@ function toRoomEvents(events: readonly GameEvent[]): RoomEvent[] {
       });
     } else if (event.type === "cards-drawn") {
       mapped.push({ type: "cards-drawn", playerId: event.playerId, count: event.count });
+    } else if (event.type === "player-skipped" || event.type === "player-unskipped") {
+      mapped.push({ type: event.type, playerId: event.playerId });
     }
   }
   return mapped;

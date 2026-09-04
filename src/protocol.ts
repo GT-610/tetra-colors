@@ -26,8 +26,10 @@ export interface PublicGameView {
   drawPileCount: number;
   turnNumber: number;
   turnDeadline: number;
+  actionBlockedUntil: number;
   playableCardIds: string[];
   drawnCardId: string | null;
+  skippedPlayerId: string | null;
   winnerId: string | null;
 }
 
@@ -57,6 +59,8 @@ export type RoomEvent =
   | { type: "player-became-bot"; playerId: string }
   | { type: "card-played"; playerId: string; card: Card }
   | { type: "cards-drawn"; playerId: string; count: number }
+  | { type: "player-skipped"; playerId: string }
+  | { type: "player-unskipped"; playerId: string }
   | { type: "turn-timed-out"; playerId: string };
 
 export type ServerMessage =

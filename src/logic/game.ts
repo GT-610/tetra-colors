@@ -54,6 +54,7 @@ export function startGame(
     turnIndex: 0,
     direction: 1,
     drawnCardId: null,
+    skippedPlayerId: null,
     winnerId: null,
     turnNumber: 1,
     config: { ...config },
@@ -182,13 +183,13 @@ function playCard(
   nextState.currentColor = "color" in card ? card.color : (chosenColor as CardColor);
   nextState.drawnCardId = null;
 
-  const events: GameEvent[] = [
-    {
-      type: "card-played",
-      playerId: currentPlayer.id,
-      card,
-    },
-  ];
+  const events: GameEvent[] = [];
+  clearSkippedPlayer(nextState, events);
+  events.push({
+    type: "card-played",
+    playerId: currentPlayer.id,
+    card,
+  });
 
   if (card.kind === "draw-two" || card.kind === "wild-draw-four") {
     const penalty = card.kind === "draw-two" ? 2 : 4;
@@ -226,6 +227,15 @@ function playCard(
   }
 
   if (card.kind === "skip") {
+    const skippedPlayer =
+      nextState.players[
+        advanceIndex(nextState.turnIndex, nextState.direction, nextState.players.length)
+      ];
+    if (!skippedPlayer) {
+      throw new Error("Skipped player does not exist");
+    }
+    nextState.skippedPlayerId = skippedPlayer.id;
+    events.push({ type: "player-skipped", playerId: skippedPlayer.id });
     moveTurn(nextState, 2, events);
     return { ok: true, state: nextState, events };
   }
@@ -247,6 +257,7 @@ function drawCard(state: GameState, currentPlayer: GamePlayer, random: RandomSou
 
   const nextState = cloneState(state);
   const events: GameEvent[] = [];
+  clearSkippedPlayer(nextState, events);
   const count = drawCards(nextState, nextState.turnIndex, 1, random);
   const nextPlayer = nextState.players[nextState.turnIndex];
 
@@ -278,6 +289,7 @@ function passTurn(state: GameState): GameResult {
 
   const nextState = cloneState(state);
   const events: GameEvent[] = [];
+  clearSkippedPlayer(nextState, events);
   nextState.drawnCardId = null;
   moveTurn(nextState, 1, events);
   return { ok: true, state: nextState, events };
@@ -335,6 +347,12 @@ function moveTurn(state: GameState, steps: number, events: GameEvent[]): void {
     throw new Error("Next player does not exist");
   }
   events.push({ type: "turn-started" });
+}
+
+function clearSkippedPlayer(state: GameState, events: GameEvent[]): void {
+  if (!state.skippedPlayerId) return;
+  events.push({ type: "player-unskipped", playerId: state.skippedPlayerId });
+  state.skippedPlayerId = null;
 }
 
 function cloneState(state: GameState): GameState {
