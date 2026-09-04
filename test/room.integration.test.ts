@@ -90,6 +90,58 @@ describe("RoomDO integration", () => {
     await expectServerError(guestConnection.inbox, "invalid_action");
   });
 
+  it("advances a bot turn through the short scheduler path", async () => {
+    const host = await createRoom("节奏测试");
+    const connection = await connect(host);
+
+    connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "hard" }));
+    const lobby = await snapshotFrom(
+      connection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
+    const bot = lobby.players.find((player) => player.isBot);
+    expect(bot?.difficulty).toBe("hard");
+    if (!bot) throw new Error("Bot snapshot was missing");
+
+    connection.socket.send(JSON.stringify({ type: "lobby.start" }));
+    await snapshotFrom(connection.inbox, (snapshot) => snapshot.phase === "playing");
+
+    connection.socket.send(JSON.stringify({ type: "game.draw-card" }));
+    const afterDraw = await snapshotFrom(
+      connection.inbox,
+      (snapshot) =>
+        snapshot.phase === "playing" &&
+        (snapshot.game?.currentPlayerId === bot.id || snapshot.game?.drawnCardId !== null),
+    );
+    let botTurn = afterDraw;
+    if (afterDraw.game?.currentPlayerId !== bot.id) {
+      connection.socket.send(JSON.stringify({ type: "game.pass-turn" }));
+      botTurn = await snapshotFrom(
+        connection.inbox,
+        (snapshot) => snapshot.phase === "playing" && snapshot.game?.currentPlayerId === bot.id,
+      );
+    }
+
+    const initialTurnNumber = botTurn.game?.turnNumber;
+    const initialBotHand = botTurn.players.find((player) => player.id === bot.id)?.handCount;
+    const initialDrawPile = botTurn.game?.drawPileCount;
+    const initialDiscard = botTurn.game?.topDiscard.id;
+    const startedAt = Date.now();
+
+    await snapshotFrom(
+      connection.inbox,
+      (snapshot) =>
+        snapshot.phase === "finished" ||
+        snapshot.game?.turnNumber !== initialTurnNumber ||
+        snapshot.players.find((player) => player.id === bot.id)?.handCount !== initialBotHand ||
+        snapshot.game?.drawPileCount !== initialDrawPile ||
+        snapshot.game?.topDiscard.id !== initialDiscard,
+      5_000,
+    );
+
+    expect(Date.now() - startedAt).toBeLessThan(4_000);
+  });
+
   it("rate limits excessive WebSocket actions", async () => {
     const host = await createRoom("节流测试");
     const connection = await connect(host);
@@ -195,9 +247,11 @@ async function connect(session: RoomSessionResponse) {
 async function snapshotFrom(
   inbox: MessageInbox,
   predicate: (snapshot: RoomSnapshot) => boolean,
+  timeoutMs?: number,
 ): Promise<RoomSnapshot> {
   const message = await inbox.waitFor(
     (candidate) => candidate.type === "snapshot" && predicate(candidate.snapshot),
+    timeoutMs,
   );
   if (message.type !== "snapshot") throw new Error("Expected a snapshot message");
   return message.snapshot;

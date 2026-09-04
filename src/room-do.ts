@@ -58,6 +58,7 @@ export class RoomDO extends DurableObject<Env> {
   private room: RoomData | null = null;
   private readonly ready: Promise<void>;
   private readonly rateBuckets = new Map<string, RateBucket>();
+  private fastBotTarget: number | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -647,6 +648,39 @@ export class RoomDO extends DurableObject<Env> {
       this.broadcast({ type: "event", event });
     }
     this.broadcastSnapshots();
+    this.scheduleFastBotWakeup();
+  }
+
+  private scheduleFastBotWakeup(): void {
+    const target = this.room?.scheduledBotAt ?? null;
+    if (target === null || !this.hasConnectedHuman() || this.fastBotTarget === target) {
+      return;
+    }
+
+    this.fastBotTarget = target;
+    this.ctx.waitUntil(this.runFastBotWakeup(target));
+  }
+
+  private async runFastBotWakeup(target: number): Promise<void> {
+    try {
+      await scheduler.wait(Math.max(0, target - Date.now()));
+      await this.ready;
+      if (
+        this.room?.phase !== "playing" ||
+        this.room.scheduledBotAt !== target ||
+        !this.hasConnectedHuman()
+      ) {
+        return;
+      }
+
+      this.fastBotTarget = null;
+      const events = this.runBotTurn();
+      await this.persistAndBroadcast(events);
+    } finally {
+      if (this.fastBotTarget === target) {
+        this.fastBotTarget = null;
+      }
+    }
   }
 
   private async persist(): Promise<void> {
