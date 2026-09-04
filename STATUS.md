@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 6 — Awaiting custom domain
+Phase 6 — Completed (workers.dev delivery)
 
 ## Completed
 
@@ -96,12 +96,13 @@ Phase 6 — Awaiting custom domain
 - Deployed the final workers.dev candidate as Cloudflare version
   `4747b923-bc52-49c0-9519-2b1478363065`. The health endpoint, cached asset security headers, and all
   three `TRY52` sessions passed post-deploy reload checks with empty browser consoles.
+- Completed the current delivery scope on workers.dev after the project owner chose to defer custom
+  domain binding and handle it separately later.
 
 ## Remaining
 
-- Receive and bind the custom domain.
-- Run the final HTTPS and WebSocket regression on that domain and publish the final report.
+- None for the current scope.
 
 ## Known issues
 
-- None currently.
+- A custom domain is intentionally not configured; the project owner will bind it later.
