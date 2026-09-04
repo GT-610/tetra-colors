@@ -134,6 +134,10 @@ Post-delivery optimization — Complete
 - Re-ran strict unused-symbol checks, CSS reference analysis, removed-symbol and token-URL searches,
   prohibited tracking/DOM API and trademark scans, dependency advisory checks, and branch diff
   validation with no outstanding findings.
+- Cleared terminally rejected WebSocket sessions after bounded reconnect attempts while preserving
+  the established cleanup for accepted `session_expired` messages. The bounded rate limiter now
+  removes only expired buckets and rejects new keys rather than evicting active callers. Seven test
+  files now contain 37 passing tests.
 
 ## Remaining
 

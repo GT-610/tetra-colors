@@ -27,8 +27,12 @@ export class FixedWindowRateLimiter {
     if (bucket) {
       this.buckets.delete(key);
     } else if (this.buckets.size >= this.maxBuckets) {
-      const oldestKey = this.buckets.keys().next().value;
-      if (oldestKey !== undefined) this.buckets.delete(oldestKey);
+      for (const [bucketKey, candidate] of this.buckets) {
+        if (now - candidate.startedAt >= this.windowMs) {
+          this.buckets.delete(bucketKey);
+        }
+      }
+      if (this.buckets.size >= this.maxBuckets) return false;
     }
 
     this.buckets.set(key, { startedAt: now, count: 1 });

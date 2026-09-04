@@ -42,6 +42,14 @@ export function useRoomClient(): RoomClient {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectAllowedRef = useRef(true);
 
+  const invalidateSession = useCallback(() => {
+    reconnectAllowedRef.current = false;
+    clearStoredSession();
+    setSession(null);
+    setSnapshot(null);
+    setLatestEvent(null);
+  }, []);
+
   useEffect(() => {
     if (!session) {
       setConnectionState("idle");
@@ -90,11 +98,7 @@ export function useRoomClient(): RoomClient {
         } else if (message.type === "error") {
           setError(message.message);
           if (message.code === "session_expired") {
-            reconnectAllowedRef.current = false;
-            clearStoredSession();
-            setSession(null);
-            setSnapshot(null);
-            setLatestEvent(null);
+            invalidateSession();
             socket.close(4401, "Session expired");
           }
         }
@@ -105,6 +109,7 @@ export function useRoomClient(): RoomClient {
         if (disposed || !reconnectAllowedRef.current) return;
         reconnectAttempts += 1;
         if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+          invalidateSession();
           setConnectionState("disconnected");
           setError(copy.invalidSession);
           return;
@@ -126,7 +131,7 @@ export function useRoomClient(): RoomClient {
       socketRef.current?.close(1000, "Client navigation");
       socketRef.current = null;
     };
-  }, [session]);
+  }, [session, invalidateSession]);
 
   const activateSession = useCallback((nextSession: RoomSessionResponse) => {
     storeSession(nextSession);
