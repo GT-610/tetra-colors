@@ -1,2 +1,12 @@
 node_modules/
+dist/
+coverage/
+.wrangler/
+.dev.vars
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
 .vscode/
+!.vscode/init-prompt.md
