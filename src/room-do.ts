@@ -534,6 +534,7 @@ export class RoomDO extends DurableObject<Env> {
         player.disconnectedAt !== null &&
         player.disconnectedAt + RECONNECT_GRACE_MS <= now,
     );
+    if (expired.length === 0) return;
 
     for (const player of expired) {
       if (this.room.phase === "lobby") {

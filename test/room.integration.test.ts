@@ -1,9 +1,29 @@
-import { exports } from "cloudflare:workers";
+import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
+import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { RoomSessionResponse, RoomSnapshot, ServerMessage } from "../src/protocol";
 
 const sockets: WebSocket[] = [];
+
+interface StoredRoomHarness {
+  phase: "lobby" | "playing" | "finished";
+  lastActivity: number;
+  turnDeadline: number | null;
+  scheduledBotAt: number | null;
+  players: Array<{
+    id: string;
+    connected: boolean;
+    controlledByBot: boolean;
+    disconnectedAt: number | null;
+  }>;
+  game: { winnerId: string | null; turnNumber: number } | null;
+}
+
+interface RoomInstanceHarness {
+  room: StoredRoomHarness | null;
+  alarm: () => Promise<void>;
+}
 
 afterEach(() => {
   for (const socket of sockets.splice(0)) {
@@ -142,6 +162,107 @@ describe("RoomDO integration", () => {
     expect(Date.now() - startedAt).toBeLessThan(4_000);
   });
 
+  it("survives hibernation and completes the disconnect, reconnect, and rematch lifecycle", async () => {
+    const host = await createRoom("生命周期测试");
+    const connection = await connect(host);
+
+    connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "medium" }));
+    await snapshotFrom(
+      connection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
+
+    connection.socket.send(JSON.stringify({ type: "lobby.start" }));
+    const started = await snapshotFrom(
+      connection.inbox,
+      (snapshot) => snapshot.phase === "playing",
+    );
+    const initialTurn = started.game?.turnNumber;
+    const stub = env.ROOMS.getByName(host.roomCode);
+
+    await runInDurableObject(stub, async (_instance, state) => {
+      const room = await state.storage.get<StoredRoomHarness>("room");
+      if (!room) throw new Error("Stored room was missing");
+      room.turnDeadline = Date.now() - 1;
+      room.scheduledBotAt = null;
+      await state.storage.put("room", room);
+      await state.storage.setAlarm(Date.now() - 1);
+    });
+    await evictDurableObject(stub);
+    await runInDurableObject(stub, async (_instance, state) => {
+      await state.storage.setAlarm(Date.now() - 1);
+    });
+    await expect(runDurableObjectAlarm(stub)).resolves.toBe(true);
+
+    await connection.inbox.waitFor(
+      (message) => message.type === "event" && message.event.type === "turn-timed-out",
+    );
+    await snapshotFrom(
+      connection.inbox,
+      (snapshot) => snapshot.phase === "playing" && snapshot.game?.turnNumber !== initialTurn,
+    );
+
+    connection.socket.close(1000, "Lifecycle test disconnect");
+    await waitForCondition(() =>
+      runInDurableObject(stub, (instance) => {
+        const room = (instance as unknown as RoomInstanceHarness).room;
+        return room?.players.find((player) => player.id === host.playerId)?.connected === false;
+      }),
+    );
+
+    const finishedRoom = await runInDurableObject(stub, async (instance) => {
+      const roomInstance = instance as unknown as RoomInstanceHarness;
+      const human = roomInstance.room?.players.find((player) => player.id === host.playerId);
+      if (!human) throw new Error("Host player was missing");
+      human.disconnectedAt = Date.now() - 30_001;
+
+      for (let step = 0; step < 1_000; step += 1) {
+        const room = roomInstance.room;
+        if (!room || room.phase === "finished") return room;
+        if (room.scheduledBotAt !== null) room.scheduledBotAt = Date.now() - 1;
+        else if (room.turnDeadline !== null) room.turnDeadline = Date.now() - 1;
+        await roomInstance.alarm();
+      }
+
+      throw new Error("Automated room did not finish within 1,000 alarm steps");
+    });
+
+    expect(finishedRoom?.phase).toBe("finished");
+    expect(finishedRoom?.game?.winnerId).toBeTruthy();
+
+    const restoredSession = await joinRoom(host.roomCode, "ignored", host.playerToken);
+    const restoredConnection = await connect(restoredSession);
+    const finishedSnapshot = await snapshotFrom(
+      restoredConnection.inbox,
+      (snapshot) => snapshot.phase === "finished",
+    );
+    expect(finishedSnapshot.game?.winnerId).toBe(finishedRoom?.game?.winnerId);
+
+    restoredConnection.socket.send(JSON.stringify({ type: "game.rematch" }));
+    const rematch = await snapshotFrom(
+      restoredConnection.inbox,
+      (snapshot) => snapshot.phase === "playing",
+    );
+    expect(rematch.players).toHaveLength(2);
+    expect(rematch.hand).toHaveLength(7);
+  }, 30_000);
+
+  it("deletes an abandoned room after the idle retention period", async () => {
+    const host = await createRoom("闲置测试");
+    const stub = env.ROOMS.getByName(host.roomCode);
+
+    await runInDurableObject(stub, async (instance) => {
+      const roomInstance = instance as unknown as RoomInstanceHarness;
+      if (!roomInstance.room) throw new Error("Room instance was missing");
+      roomInstance.room.lastActivity = Date.now() - 16 * 60_000;
+      await roomInstance.alarm();
+      expect(roomInstance.room).toBeNull();
+    });
+
+    const response = await joinRoomResponse(host.roomCode, "迟到玩家");
+    expect(response.status).toBe(404);
+  });
+
   it("rate limits excessive WebSocket actions", async () => {
     const host = await createRoom("节流测试");
     const connection = await connect(host);
@@ -262,4 +383,13 @@ async function expectServerError(inbox: MessageInbox, code: string): Promise<voi
     (candidate) => candidate.type === "error" && candidate.code === code,
   );
   expect(message).toMatchObject({ type: "error", code });
+}
+
+async function waitForCondition(predicate: () => Promise<boolean>, timeoutMs = 2_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("Timed out waiting for condition");
 }
