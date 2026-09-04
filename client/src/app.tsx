@@ -1,0 +1,366 @@
+import { useMemo, useState } from "react";
+
+import type { BotDifficulty, CardColor } from "../../src/logic";
+import type { PublicPlayer, RoomSnapshot } from "../../src/protocol";
+import { copy } from "./copy";
+import { type ConnectionState, useRoomClient } from "./room-client";
+
+const SHAPE_CLASSES: Record<CardColor, string> = {
+  coral: "shape-square",
+  amber: "shape-triangle",
+  teal: "shape-circle",
+  azure: "shape-diamond",
+};
+const EMPTY_SEAT_IDS = ["empty-one", "empty-two", "empty-three", "empty-four", "empty-five"];
+
+export function App() {
+  const room = useRoomClient();
+
+  if (!room.session) {
+    return (
+      <WelcomeScreen
+        busy={room.busy}
+        error={room.error}
+        onCreate={room.createRoom}
+        onJoin={room.joinRoom}
+        onClearError={room.clearError}
+      />
+    );
+  }
+
+  if (!room.snapshot) {
+    return (
+      <main className="app-shell centered-shell">
+        <section className="panel connecting-panel" aria-live="polite">
+          <BrandMark />
+          <div className="spinner" aria-hidden="true" />
+          <h1>{room.connectionState === "reconnecting" ? copy.reconnecting : copy.connecting}</h1>
+          {room.error ? <p className="error-banner">{room.error}</p> : null}
+          <button className="button button-ghost" type="button" onClick={room.leave}>
+            {copy.leave}
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  if (room.snapshot.phase === "lobby") {
+    return (
+      <LobbyScreen
+        snapshot={room.snapshot}
+        connectionState={room.connectionState}
+        error={room.error}
+        onSend={room.send}
+        onLeave={room.leave}
+      />
+    );
+  }
+
+  return (
+    <main className="app-shell centered-shell">
+      <section className="panel table-placeholder">
+        <BrandMark />
+        <p className="eyebrow">
+          {copy.room} {room.snapshot.roomCode}
+        </p>
+        <h1>{copy.tableLoading}</h1>
+        <p>{copy.tableLoadingHint}</p>
+        <ul className="mini-hands" aria-label={`${room.snapshot.players.length}${copy.seats}`}>
+          {room.snapshot.players.map((player, index) => (
+            <li key={player.id} className={`mini-hand color-${colorForIndex(index)}`}>
+              {player.handCount}
+            </li>
+          ))}
+        </ul>
+        <button className="button button-ghost" type="button" onClick={room.leave}>
+          {copy.leave}
+        </button>
+      </section>
+    </main>
+  );
+}
+
+interface WelcomeScreenProps {
+  busy: boolean;
+  error: string | null;
+  onCreate: (nickname: string) => Promise<void>;
+  onJoin: (nickname: string, roomCode: string) => Promise<void>;
+  onClearError: () => void;
+}
+
+function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeScreenProps) {
+  const [nickname, setNickname] = useState("");
+  const [roomCode, setRoomCode] = useState("");
+  const normalizedNickname = nickname.trim();
+  const normalizedRoomCode = roomCode.trim().toUpperCase();
+  const nicknameValid = normalizedNickname.length > 0 && normalizedNickname.length <= 20;
+  const roomCodeValid = /^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}$/.test(normalizedRoomCode);
+
+  return (
+    <main className="app-shell welcome-shell">
+      <section className="welcome-copy">
+        <BrandMark />
+        <p className="eyebrow">{copy.eyebrow}</p>
+        <h1>{copy.brand}</h1>
+        <p className="lede">{copy.intro}</p>
+        <div className="card-back-preview" aria-hidden="true">
+          <div className="card-back-grid">
+            <span className="shape shape-circle" />
+            <span className="shape shape-diamond" />
+            <span className="shape shape-triangle" />
+            <span className="shape shape-square" />
+          </div>
+        </div>
+      </section>
+
+      <section className="panel entry-panel" aria-labelledby="entry-title">
+        <div>
+          <p className="section-kicker">无需账号</p>
+          <h2 id="entry-title">进入牌桌</h2>
+        </div>
+
+        <label className="field">
+          <span>{copy.nicknameLabel}</span>
+          <input
+            autoComplete="nickname"
+            maxLength={20}
+            placeholder={copy.nicknamePlaceholder}
+            value={nickname}
+            onChange={(event) => {
+              setNickname(event.target.value);
+              onClearError();
+            }}
+          />
+        </label>
+
+        <button
+          className="button button-primary"
+          type="button"
+          disabled={!nicknameValid || busy}
+          onClick={() => void onCreate(normalizedNickname)}
+        >
+          {busy ? copy.entering : copy.createRoom}
+        </button>
+
+        <div className="divider">
+          <span>或凭房间码加入</span>
+        </div>
+
+        <label className="field">
+          <span>{copy.roomCodeLabel}</span>
+          <input
+            autoCapitalize="characters"
+            autoComplete="off"
+            className="room-code-input"
+            maxLength={5}
+            placeholder={copy.roomCodePlaceholder}
+            value={roomCode}
+            onChange={(event) => {
+              setRoomCode(event.target.value.toUpperCase());
+              onClearError();
+            }}
+          />
+        </label>
+
+        <button
+          className="button button-secondary"
+          type="button"
+          disabled={!nicknameValid || !roomCodeValid || busy}
+          onClick={() => void onJoin(normalizedNickname, normalizedRoomCode)}
+        >
+          {busy ? copy.entering : copy.joinRoom}
+        </button>
+
+        {error ? (
+          <p className="error-banner" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </section>
+    </main>
+  );
+}
+
+interface LobbyScreenProps {
+  snapshot: RoomSnapshot;
+  connectionState: ConnectionState;
+  error: string | null;
+  onSend: ReturnType<typeof useRoomClient>["send"];
+  onLeave: () => void;
+}
+
+function LobbyScreen({ snapshot, connectionState, error, onSend, onLeave }: LobbyScreenProps) {
+  const [difficulty, setDifficulty] = useState<BotDifficulty>("medium");
+  const [copied, setCopied] = useState(false);
+  const isHost = snapshot.selfId === snapshot.hostId;
+  const canStart = snapshot.players.length >= 2;
+
+  const subtitle = useMemo(
+    () => `${snapshot.players.length} / 6 ${copy.seats}`,
+    [snapshot.players.length],
+  );
+
+  const copyRoomCode = async () => {
+    await navigator.clipboard.writeText(snapshot.roomCode);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1_500);
+  };
+
+  return (
+    <main className="app-shell lobby-shell">
+      <header className="topbar">
+        <BrandMark compact />
+        <div className="topbar-actions">
+          <ConnectionBadge state={connectionState} />
+          <button className="text-button" type="button" onClick={onLeave}>
+            {copy.leave}
+          </button>
+        </div>
+      </header>
+
+      <section className="room-code-card" aria-label={`${copy.room} ${snapshot.roomCode}`}>
+        <div>
+          <span>{copy.room}</span>
+          <strong>{snapshot.roomCode}</strong>
+        </div>
+        <button className="copy-button" type="button" onClick={() => void copyRoomCode()}>
+          {copied ? copy.copied : copy.copyCode}
+        </button>
+      </section>
+
+      <section className="lobby-heading">
+        <div>
+          <p className="section-kicker">{subtitle}</p>
+          <h1>{copy.lobbyTitle}</h1>
+          <p>{copy.lobbyIntro}</p>
+        </div>
+      </section>
+
+      <section className="player-grid" aria-label="玩家列表">
+        {snapshot.players.map((player, index) => (
+          <PlayerTile
+            key={player.id}
+            player={player}
+            color={colorForIndex(index)}
+            isHost={player.id === snapshot.hostId}
+            isSelf={player.id === snapshot.selfId}
+            canRemove={isHost && player.isBot}
+            onRemove={() => onSend({ type: "lobby.remove-bot", playerId: player.id })}
+          />
+        ))}
+        {EMPTY_SEAT_IDS.slice(0, 6 - snapshot.players.length).map((seatId) => (
+          <div className="player-tile empty-seat" key={seatId} aria-hidden="true">
+            <span>+</span>
+          </div>
+        ))}
+      </section>
+
+      <section className="panel lobby-controls">
+        {isHost ? (
+          <>
+            <div className="bot-controls">
+              <label className="field compact-field">
+                <span>{copy.bot}</span>
+                <select
+                  value={difficulty}
+                  onChange={(event) => setDifficulty(event.target.value as BotDifficulty)}
+                >
+                  <option value="easy">{copy.difficulty.easy}</option>
+                  <option value="medium">{copy.difficulty.medium}</option>
+                  <option value="hard">{copy.difficulty.hard}</option>
+                </select>
+              </label>
+              <button
+                className="button button-secondary"
+                type="button"
+                disabled={snapshot.players.length >= 6}
+                onClick={() => onSend({ type: "lobby.add-bot", difficulty })}
+              >
+                {copy.addBot}
+              </button>
+            </div>
+            <button
+              className="button button-primary start-button"
+              type="button"
+              disabled={!canStart}
+              onClick={() => onSend({ type: "lobby.start" })}
+            >
+              {canStart ? copy.startGame : copy.needPlayers}
+            </button>
+          </>
+        ) : (
+          <div className="waiting-message">
+            <span className="waiting-dot" aria-hidden="true" />
+            {copy.waitingForHost}
+          </div>
+        )}
+        {error ? (
+          <p className="error-banner" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </section>
+    </main>
+  );
+}
+
+interface PlayerTileProps {
+  player: PublicPlayer;
+  color: CardColor;
+  isHost: boolean;
+  isSelf: boolean;
+  canRemove: boolean;
+  onRemove: () => void;
+}
+
+function PlayerTile({ player, color, isHost, isSelf, canRemove, onRemove }: PlayerTileProps) {
+  return (
+    <article className={`player-tile color-${color}`}>
+      <div className={`player-symbol ${SHAPE_CLASSES[color]}`} aria-hidden="true" />
+      <div className="player-details">
+        <strong>{player.nickname}</strong>
+        <span>
+          {isHost
+            ? copy.host
+            : player.isBot
+              ? copy.difficulty[player.difficulty ?? "medium"]
+              : "玩家"}
+          {isSelf ? ` · ${copy.you}` : ""}
+          {!player.connected ? ` · ${copy.offline}` : ""}
+        </span>
+      </div>
+      {canRemove ? (
+        <button
+          className="remove-button"
+          type="button"
+          onClick={onRemove}
+          aria-label={`${copy.removeBot} ${player.nickname}`}
+        >
+          {copy.removeBot}
+        </button>
+      ) : null}
+    </article>
+  );
+}
+
+function ConnectionBadge({ state }: { state: ConnectionState }) {
+  return <span className={`connection-badge state-${state}`}>{copy.connection[state]}</span>;
+}
+
+function BrandMark({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={`brand-mark ${compact ? "brand-mark-compact" : ""}`}>
+      <span className="brand-symbols" aria-hidden="true">
+        <i className="shape shape-circle" />
+        <i className="shape shape-diamond" />
+        <i className="shape shape-triangle" />
+        <i className="shape shape-square" />
+      </span>
+      {compact ? <strong>{copy.brand}</strong> : null}
+    </div>
+  );
+}
+
+function colorForIndex(index: number): CardColor {
+  return (["teal", "azure", "amber", "coral"] as const)[index % 4] ?? "teal";
+}

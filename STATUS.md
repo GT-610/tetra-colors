@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 3 — Frontend lobby (in progress)
+Phase 4 — Game table (in progress)
 
 ## Completed
 
@@ -32,13 +32,20 @@ Phase 3 — Frontend lobby (in progress)
 - Passed 21 tests across 5 files, including real Durable Object instances, multiple WebSockets,
   capacity, permissions, reconnection, rate limiting, and cross-player hidden-card checks.
 - Passed the independent local Wrangler WebSocket smoke test with two clients and three seats.
+- Added centralized Simplified Chinese copy, per-tab session restoration, heartbeat and bounded
+  WebSocket reconnection, API loading/error states, and client intent dispatch.
+- Built the original mobile-first entry and lobby UI with four color/shape identities, responsive
+  desktop layout, room code, player seats, connection state, and host bot controls.
+- Deployed Phase 3 and verified create → second-tab join → add hard bot → start with two live browser
+  tabs. Both tabs reached the same three-player game state and had no console warnings or errors.
+- Verified a 390-pixel mobile lobby and a 1280 × 720 desktop entry layout through the browser.
 
 ## Remaining
 
-- Build the mobile-first nickname, create/join, and lobby flows.
-- Add host controls for bot difficulty, removal, and starting a round.
-- Verify create, multi-tab join, and start through the browser.
-- Continue with Phases 4–6 from `.vscode/init-prompt.md`.
+- Build the full table, hand, draw/discard piles, color choice, timer, events, and result views.
+- Add reconnect feedback plus loading and error states for every game action.
+- Complete a full game in multiple browser tabs without state divergence.
+- Continue with Phases 5–6 from `.vscode/init-prompt.md`.
 
 ## Known issues
 
