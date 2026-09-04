@@ -224,7 +224,15 @@ describe("RoomDO integration", () => {
       if (!human) throw new Error("Host player was missing");
       human.disconnectedAt = Date.now() - 30_001;
 
-      for (let step = 0; step < 1_000; step += 1) {
+      const expiringRoom = roomInstance.room;
+      if (!expiringRoom) throw new Error("Room disappeared before reconnect expiry");
+      if (expiringRoom.scheduledBotAt !== null) expiringRoom.scheduledBotAt = Date.now() - 1;
+      else if (expiringRoom.turnDeadline !== null) expiringRoom.turnDeadline = Date.now() - 1;
+      await roomInstance.alarm();
+      expect(human.controlledByBot).toBe(true);
+      expect(human.disconnectedAt).toBeNull();
+
+      for (let step = 1; step < 1_000; step += 1) {
         const room = roomInstance.room;
         if (!room || room.phase === "finished") return room;
         if (room.scheduledBotAt !== null) room.scheduledBotAt = Date.now() - 1;
