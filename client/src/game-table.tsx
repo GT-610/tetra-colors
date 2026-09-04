@@ -368,11 +368,8 @@ function EventToast({ event, snapshot }: { event: RoomEvent; snapshot: RoomSnaps
   if (event.type === "card-played") text = `${playerName}打出${cardLabel(event.card)}`;
   else if (event.type === "cards-drawn") text = `${playerName}抽了 ${event.count} 张牌`;
   else if (event.type === "turn-timed-out") text = `${playerName}回合超时，已自动行动`;
-  else if (event.type === "player-joined") text = `${event.nickname}加入房间`;
-  else if (event.type === "player-left") text = `${playerName}离开房间`;
   else if (event.type === "player-reconnected") text = `${playerName}已重新连接`;
-  else if (event.type === "player-became-bot") text = `${playerName}已由电脑托管`;
-  else text = "本局已经结束";
+  else text = `${playerName}已由电脑托管`;
   return (
     <div className="event-toast" role="status">
       {text}

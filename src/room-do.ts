@@ -265,9 +265,7 @@ export class RoomDO extends DurableObject<Env> {
     const session = await createHumanPlayer(nickname);
     this.room.players.push(session.player);
     this.room.lastActivity = Date.now();
-    await this.persistAndBroadcast([
-      { type: "player-joined", playerId: session.player.id, nickname: session.player.nickname },
-    ]);
+    await this.persistAndBroadcast([]);
 
     return Response.json(toSessionResponse(this.room.code, session.player.id, session.rawToken), {
       status: 201,
@@ -351,9 +349,7 @@ export class RoomDO extends DurableObject<Env> {
       disconnectedAt: null,
     };
     this.room.players.push(bot);
-    await this.persistAndBroadcast([
-      { type: "player-joined", playerId: bot.id, nickname: bot.nickname },
-    ]);
+    await this.persistAndBroadcast([]);
   }
 
   private async removeBot(socket: WebSocket, playerId: string, botId: string): Promise<void> {
@@ -370,7 +366,7 @@ export class RoomDO extends DurableObject<Env> {
     }
 
     this.room.players = this.room.players.filter((player) => player.id !== botId);
-    await this.persistAndBroadcast([{ type: "player-left", playerId: botId }]);
+    await this.persistAndBroadcast([]);
   }
 
   private async startRound(socket: WebSocket, playerId: string): Promise<void> {
@@ -442,7 +438,7 @@ export class RoomDO extends DurableObject<Env> {
         return;
       }
       this.reassignHost();
-      await this.persistAndBroadcast([{ type: "player-left", playerId }]);
+      await this.persistAndBroadcast([]);
     } else {
       player.connected = false;
       player.controlledByBot = true;
@@ -533,7 +529,6 @@ export class RoomDO extends DurableObject<Env> {
     for (const player of expired) {
       if (this.room.phase === "lobby") {
         this.room.players = this.room.players.filter((candidate) => candidate.id !== player.id);
-        events.push({ type: "player-left", playerId: player.id });
       } else {
         player.controlledByBot = true;
         player.difficulty = "medium";
@@ -899,8 +894,6 @@ function toRoomEvents(events: readonly GameEvent[]): RoomEvent[] {
       });
     } else if (event.type === "cards-drawn") {
       mapped.push({ type: "cards-drawn", playerId: event.playerId, count: event.count });
-    } else if (event.type === "game-finished") {
-      mapped.push({ type: "game-finished", winnerId: event.winnerId });
     }
   }
   return mapped;

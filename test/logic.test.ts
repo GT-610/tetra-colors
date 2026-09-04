@@ -194,11 +194,7 @@ describe("game rules", () => {
       expect(result.state.phase).toBe("finished");
       expect(result.state.winnerId).toBe("a");
       expect(result.state.players[1]?.hand).toHaveLength(3);
-      expect(result.events.map((event) => event.type)).toEqual([
-        "card-played",
-        "cards-drawn",
-        "game-finished",
-      ]);
+      expect(result.events.map((event) => event.type)).toEqual(["card-played", "cards-drawn"]);
     }
   });
 

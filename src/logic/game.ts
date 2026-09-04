@@ -237,7 +237,6 @@ function playCard(
 function finishGame(state: GameState, winnerId: string, events: GameEvent[]): GameResult {
   state.phase = "finished";
   state.winnerId = winnerId;
-  events.push({ type: "game-finished", winnerId });
   return { ok: true, state, events };
 }
 

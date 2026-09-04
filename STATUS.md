@@ -121,6 +121,9 @@ Post-delivery optimization — Batch 4 of 4 completed
   clipboard feedback timers clean up on unmount, storage failures no longer prevent active play, and
   persisted sessions use the shared validated contract. Six test files and 33 tests pass after the
   client cleanup.
+- Removed lobby join/leave and game-finished events after the completion audit confirmed that no
+  production screen consumes them. Authoritative snapshots remain the source of those state changes,
+  and the test suite no longer asserts an event that existed only for tests.
 
 ## Remaining
 

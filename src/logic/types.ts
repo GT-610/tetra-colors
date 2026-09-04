@@ -70,8 +70,7 @@ export type GameErrorCode =
 export type GameEvent =
   | { type: "card-played"; playerId: string; card: Card }
   | { type: "cards-drawn"; playerId: string; count: number }
-  | { type: "turn-started" }
-  | { type: "game-finished"; winnerId: string };
+  | { type: "turn-started" };
 
 export type GameResult =
   | { ok: true; state: GameState; events: GameEvent[] }

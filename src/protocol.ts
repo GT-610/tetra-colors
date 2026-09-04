@@ -53,14 +53,11 @@ export type ClientMessage =
   | { type: "room.leave" };
 
 export type RoomEvent =
-  | { type: "player-joined"; playerId: string; nickname: string }
-  | { type: "player-left"; playerId: string }
   | { type: "player-reconnected"; playerId: string }
   | { type: "player-became-bot"; playerId: string }
   | { type: "card-played"; playerId: string; card: Card }
   | { type: "cards-drawn"; playerId: string; count: number }
-  | { type: "turn-timed-out"; playerId: string }
-  | { type: "game-finished"; winnerId: string };
+  | { type: "turn-timed-out"; playerId: string };
 
 export type ServerMessage =
   | { type: "snapshot"; snapshot: RoomSnapshot }
