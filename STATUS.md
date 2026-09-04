@@ -147,6 +147,9 @@ Post-delivery optimization — Complete
   pile, and raised playable cards at rest. Six-player browser checks at 1920 × 960, 390 × 844, and
   320 × 720 keep every seat and the table center visible without seat collisions or page overflow;
   opponent card flights remain below their player markers. Eight test files now contain 40 tests.
+- Switched the game shell to the dynamic viewport height and raised the isolated table-stage
+  stacking context above the hand zone. A 390 × 844 browser check resolved the shell to the full
+  844-pixel viewport and confirmed table-stage layer 6 above hand-zone layer 5; all 40 tests pass.
 
 ## Remaining
 
