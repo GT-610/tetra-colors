@@ -14,7 +14,8 @@
     "format": "biome check --write .",
     "deploy": "bun run build && wrangler deploy",
     "logs": "wrangler tail",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "smoke:ws": "bun scripts/ws-smoke.ts"
   },
   "dependencies": {
     "react": "^19.1.1",
@@ -27,6 +28,7 @@
     "@types/node": "^26.4.1",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.1.1",
     "fast-check": "^4.3.0",
     "tailwindcss": "^4.1.13",

@@ -12,10 +12,10 @@ describe("worker", () => {
     });
   });
 
-  it("can reach the room Durable Object", async () => {
-    const response = await exports.default.fetch("https://example.com/api/hello");
+  it("rejects unknown API routes without falling through to assets", async () => {
+    const response = await exports.default.fetch("https://example.com/api/missing");
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ message: "房间服务已就绪" });
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({ error: "room_not_found" });
   });
 });

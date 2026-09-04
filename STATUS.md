@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 2 — Authoritative room service (in progress)
+Phase 3 — Frontend lobby (in progress)
 
 ## Completed
 
@@ -23,13 +23,22 @@ Phase 2 — Authoritative room service (in progress)
   restrictions, discard recycling, winner detection, and three bot decision policies.
 - Passed 18 tests across 4 files, including 100 property runs and 120 mixed-difficulty bot games
   with state validation on every action.
+- Implemented the RoomDO lifecycle for creation, joining, reconnect validation, lobby management,
+  personalized snapshots, gameplay actions, rematches, and leaving.
+- Added Hibernation WebSockets with per-connection attachments, hashed reconnect tokens, action and
+  HTTP rate limits, 30-second turn/reconnect handling, alarm-driven bots, and idle room deletion.
+- Added Worker HTTP/WebSocket routing, unambiguous five-character room codes, request size checks,
+  and static asset security headers.
+- Passed 21 tests across 5 files, including real Durable Object instances, multiple WebSockets,
+  capacity, permissions, reconnection, rate limiting, and cross-player hidden-card checks.
+- Passed the independent local Wrangler WebSocket smoke test with two clients and three seats.
 
 ## Remaining
 
-- Implement RoomDO creation, joining, reconnect, lobby controls, WebSockets, and per-player views.
-- Add authoritative timers, automatic actions, bot scheduling, limits, and idle cleanup.
-- Add Workers integration tests and a local multi-connection WebSocket smoke test.
-- Continue with Phases 3–6 from `.vscode/init-prompt.md`.
+- Build the mobile-first nickname, create/join, and lobby flows.
+- Add host controls for bot difficulty, removal, and starting a round.
+- Verify create, multi-tab join, and start through the browser.
+- Continue with Phases 4–6 from `.vscode/init-prompt.md`.
 
 ## Known issues
 
