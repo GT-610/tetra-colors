@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 5 — Bots (in progress)
+Phase 6 — Awaiting custom domain
 
 ## Completed
 
@@ -48,12 +48,32 @@ Phase 5 — Bots (in progress)
 - Captured the deployed result UI at mobile and desktop sizes in
   `/private/tmp/tetra-colors-phase4-result-host.png` and
   `/private/tmp/tetra-colors-phase4-result-guest.png`.
+- Verified easy, standard, and hard bots together in production room `MZX7G`. A single human and
+  all three bot difficulties completed the full game through the normal server action pipeline;
+  the result was 0 / 15 / 14 / 14 cards and the browser console remained clean.
+- Added a short `scheduler.wait()` wake path for connected games while retaining Durable Object
+  alarms as the persistent fallback. The production hard-bot state change measured 2.213 seconds
+  including network and rendering, down from the previously observed alarm-tail delay.
+- Re-ran a complete production human-versus-bot game after the scheduling fix, including draws,
+  action cards, repeated bot turns, and three wild-color choices, with no duplicate actions or
+  console errors.
+- Deployed the bot scheduling fix as Cloudflare version
+  `8ce96e1a-5a0f-46d7-b0c8-4693602d3a7f`.
+- Expanded the public README with gameplay, architecture, privacy and security behavior, local
+  development, verification, and fork-to-Cloudflare deployment instructions.
+- Completed the workers.dev production regression in room `MDND8` with three independent human
+  browser tabs. All clients completed the game and agreed on the result (雨燕 0 cards, 山雀 4
+  cards, 云雀 9 cards), including a stale-tab refresh and token-based seat recovery.
+- Confirmed empty browser console logs on all three clients and captured the final mobile and desktop
+  results in `/private/tmp/tetra-colors-phase6-three-player-host.png` and
+  `/private/tmp/tetra-colors-phase6-three-player-desktop.png`.
+- Audited the locked dependency graph against the official npm advisory service with no reported
+  vulnerabilities.
 
 ## Remaining
 
-- Verify easy, standard, and hard bots through the production room action pipeline.
-- Complete a browser game with one human and multiple bots.
-- Continue with Phase 6 from `.vscode/init-prompt.md`.
+- Receive and bind the custom domain.
+- Run the final HTTPS and WebSocket regression on that domain and publish the final report.
 
 ## Known issues
 
