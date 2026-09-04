@@ -2,7 +2,10 @@ import { isCardColor } from "./logic/deck";
 import type { BotDifficulty, Card, CardColor, TurnDirection } from "./logic/types";
 
 export const MAX_NICKNAME_LENGTH = 20;
+export const ROOM_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 export const ROOM_CODE_LENGTH = 5;
+const ROOM_CODE_PATTERN = new RegExp(`^[${ROOM_CODE_ALPHABET}]{${ROOM_CODE_LENGTH}}$`);
+const PLAYER_TOKEN_PATTERN = /^[a-f0-9]{64}$/;
 
 export type RoomPhase = "lobby" | "playing" | "finished";
 
@@ -130,6 +133,16 @@ export function normalizeNickname(value: unknown): string | null {
   }
 
   return normalized;
+}
+
+export function normalizeRoomCode(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toUpperCase();
+  return ROOM_CODE_PATTERN.test(normalized) ? normalized : null;
+}
+
+export function isPlayerToken(value: unknown): value is string {
+  return typeof value === "string" && PLAYER_TOKEN_PATTERN.test(value);
 }
 
 export function isBotDifficulty(value: unknown): value is BotDifficulty {

@@ -4,6 +4,7 @@ import type { Env } from "./env";
 import type { BotDifficulty, GameAction, GameEvent, GameState } from "./logic";
 import { applyGameAction, chooseBotAction, getPlayableCards, startGame } from "./logic";
 import {
+  isPlayerToken,
   normalizeNickname,
   type PublicPlayer,
   parseClientMessage,
@@ -80,7 +81,7 @@ export class RoomDO extends DurableObject<Env> {
     }
 
     if (request.method === "GET" && url.pathname === "/websocket") {
-      return this.openWebSocket(request, url);
+      return this.openWebSocket(request);
     }
 
     return jsonError("room_not_found", "房间不存在", 404);
@@ -232,9 +233,12 @@ export class RoomDO extends DurableObject<Env> {
 
     const body = await readJson(request);
     const nickname = normalizeNickname(body?.nickname);
-    const providedToken = typeof body?.playerToken === "string" ? body.playerToken : null;
+    const providedToken = body?.playerToken;
 
-    if (providedToken) {
+    if (providedToken !== undefined) {
+      if (!isPlayerToken(providedToken)) {
+        return jsonError("session_expired", "原会话已失效", 401);
+      }
       const tokenHash = await hashToken(providedToken);
       const existing = this.room.players.find(
         (player) => player.kind === "human" && player.tokenHash === tokenHash,
@@ -271,7 +275,7 @@ export class RoomDO extends DurableObject<Env> {
     });
   }
 
-  private async openWebSocket(request: Request, url: URL): Promise<Response> {
+  private async openWebSocket(request: Request): Promise<Response> {
     if (!this.room) {
       return jsonError("room_not_found", "房间不存在", 404);
     }
@@ -279,8 +283,8 @@ export class RoomDO extends DurableObject<Env> {
       return jsonError("invalid_message", "需要 WebSocket 连接", 426);
     }
 
-    const rawToken = url.searchParams.get("token");
-    if (!rawToken) {
+    const rawToken = request.headers.get("Sec-WebSocket-Protocol")?.trim();
+    if (!isPlayerToken(rawToken)) {
       return jsonError("session_expired", "缺少会话凭据", 401);
     }
 
@@ -313,7 +317,11 @@ export class RoomDO extends DurableObject<Env> {
       wasAway ? [{ type: "player-reconnected", playerId: player.id }] : [],
     );
 
-    return new Response(null, { status: 101, webSocket: client });
+    return new Response(null, {
+      status: 101,
+      webSocket: client,
+      headers: { "Sec-WebSocket-Protocol": rawToken },
+    });
   }
 
   private async addBot(

@@ -125,9 +125,8 @@ async function joinRoom(roomCode: string, nickname: string): Promise<RoomSession
 async function connect(session: RoomSessionResponse) {
   const webSocketUrl = new URL(`/ws/${session.roomCode}`, baseUrl);
   webSocketUrl.protocol = webSocketUrl.protocol === "https:" ? "wss:" : "ws:";
-  webSocketUrl.searchParams.set("token", session.playerToken);
 
-  const socket = new WebSocket(webSocketUrl);
+  const socket = new WebSocket(webSocketUrl, session.playerToken);
   const inbox = new MessageInbox(socket);
   sockets.push(socket);
   await new Promise<void>((resolve, reject) => {

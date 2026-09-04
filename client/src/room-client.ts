@@ -7,6 +7,7 @@ import type {
   RoomSnapshot,
   ServerMessage,
 } from "../../src/protocol";
+import { isPlayerToken, normalizeRoomCode } from "../../src/protocol";
 import { copy } from "./copy";
 
 const SESSION_KEY = "tetra-colors.session";
@@ -58,8 +59,7 @@ export function useRoomClient(): RoomClient {
       setConnectionState(reconnectAttempts === 0 ? "connecting" : "reconnecting");
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const url = new URL(`${protocol}//${window.location.host}/ws/${session.roomCode}`);
-      url.searchParams.set("token", session.playerToken);
-      const socket = new WebSocket(url);
+      const socket = new WebSocket(url, session.playerToken);
       socketRef.current = socket;
 
       socket.addEventListener("open", () => {
@@ -247,10 +247,11 @@ function isSession(value: unknown): value is RoomSessionResponse {
     value !== null &&
     "roomCode" in value &&
     typeof value.roomCode === "string" &&
+    normalizeRoomCode(value.roomCode) === value.roomCode &&
     "playerId" in value &&
     typeof value.playerId === "string" &&
     "playerToken" in value &&
-    typeof value.playerToken === "string"
+    isPlayerToken(value.playerToken)
   );
 }
 

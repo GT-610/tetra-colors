@@ -1,7 +1,12 @@
 import { useMemo, useState } from "react";
 
 import type { BotDifficulty, CardColor } from "../../src/logic";
-import type { PublicPlayer, RoomSnapshot } from "../../src/protocol";
+import {
+  MAX_NICKNAME_LENGTH,
+  normalizeRoomCode,
+  type PublicPlayer,
+  type RoomSnapshot,
+} from "../../src/protocol";
 import { copy } from "./copy";
 import { GameTable, ResultScreen } from "./game-table";
 import { type ConnectionState, useRoomClient } from "./room-client";
@@ -86,9 +91,9 @@ function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeS
   const [nickname, setNickname] = useState("");
   const [roomCode, setRoomCode] = useState("");
   const normalizedNickname = nickname.trim();
-  const normalizedRoomCode = roomCode.trim().toUpperCase();
-  const nicknameValid = normalizedNickname.length > 0 && normalizedNickname.length <= 20;
-  const roomCodeValid = /^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}$/.test(normalizedRoomCode);
+  const normalizedRoomCode = normalizeRoomCode(roomCode);
+  const nicknameValid =
+    normalizedNickname.length > 0 && normalizedNickname.length <= MAX_NICKNAME_LENGTH;
 
   return (
     <main className="app-shell welcome-shell">
@@ -117,7 +122,7 @@ function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeS
           <span>{copy.nicknameLabel}</span>
           <input
             autoComplete="nickname"
-            maxLength={20}
+            maxLength={MAX_NICKNAME_LENGTH}
             placeholder={copy.nicknamePlaceholder}
             value={nickname}
             onChange={(event) => {
@@ -159,8 +164,10 @@ function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeS
         <button
           className="button button-secondary"
           type="button"
-          disabled={!nicknameValid || !roomCodeValid || busy}
-          onClick={() => void onJoin(normalizedNickname, normalizedRoomCode)}
+          disabled={!nicknameValid || !normalizedRoomCode || busy}
+          onClick={() => {
+            if (normalizedRoomCode) void onJoin(normalizedNickname, normalizedRoomCode);
+          }}
         >
           {busy ? copy.entering : copy.joinRoom}
         </button>

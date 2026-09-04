@@ -36,6 +36,19 @@ afterEach(() => {
 });
 
 describe("RoomDO integration", () => {
+  it("rejects WebSocket tokens supplied in the request URL", async () => {
+    const host = await createRoom("鉴权测试");
+    const response = await exports.default.fetch(
+      new Request(
+        `https://example.com/ws/${host.roomCode}?token=${encodeURIComponent(host.playerToken)}`,
+        { headers: { Upgrade: "websocket" } },
+      ),
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({ error: "session_expired" });
+  });
+
   it("creates, joins, reconnects, and enforces room capacity", async () => {
     const host = await createRoom("房主");
     expect(host.roomCode).toMatch(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}$/);
@@ -393,12 +406,15 @@ function joinRoomResponse(roomCode: string, nickname: string, playerToken?: stri
 
 async function connect(session: RoomSessionResponse) {
   const response = await exports.default.fetch(
-    new Request(
-      `https://example.com/ws/${session.roomCode}?token=${encodeURIComponent(session.playerToken)}`,
-      { headers: { Upgrade: "websocket" } },
-    ),
+    new Request(`https://example.com/ws/${session.roomCode}`, {
+      headers: {
+        Upgrade: "websocket",
+        "Sec-WebSocket-Protocol": session.playerToken,
+      },
+    }),
   );
   expect(response.status).toBe(101);
+  expect(response.headers.get("Sec-WebSocket-Protocol")).toBe(session.playerToken);
   const socket = response.webSocket;
   if (!socket) throw new Error("WebSocket response did not include a client socket");
 

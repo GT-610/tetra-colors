@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Post-delivery optimization — Batch 2 of 4 completed
+Post-delivery optimization — Batch 3 of 4 completed
 
 ## Completed
 
@@ -110,14 +110,17 @@ Post-delivery optimization — Batch 2 of 4 completed
   cards, and transferred host control to a connected human when the prior host leaves or becomes
   bot-controlled. Focused rule and real Durable Object regressions increased the suite to 27 passing
   tests.
+- Moved WebSocket tokens out of request URLs and into the negotiated subprotocol, centralized room
+  code and token validation, required JSON media types, and replaced whole-body reads with a strict
+  streaming byte limit. Replaced the unbounded HTTP rate-limit map with a constant-time bounded
+  limiter. Six test files now contain 32 passing tests, including handshake, malformed/oversized
+  body, protocol, limiter-window, and limiter-capacity coverage.
 
 ## Remaining
 
-- Harden WebSocket authentication, JSON body limits, and HTTP rate-limit storage.
 - Reduce client game-table rerenders and strengthen stored-session validation.
 - Run final quality gates and live WebSocket smoke testing, then publish the pull request.
 
 ## Known issues
 
 - A custom domain is intentionally not configured; the project owner will bind it later.
-- WebSocket session tokens currently appear in request URLs.
