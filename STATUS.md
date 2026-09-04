@@ -69,6 +69,12 @@ Phase 6 — Awaiting custom domain
   `/private/tmp/tetra-colors-phase6-three-player-desktop.png`.
 - Audited the locked dependency graph against the official npm advisory service with no reported
   vulnerabilities.
+- Found that cache-served static assets bypass Worker-generated headers, added the official Static
+  Assets `_headers` file, and verified CSP, permissions, referrer, framing, and MIME-sniffing headers
+  on the live homepage.
+- Deployed the hardened production build as Cloudflare version
+  `8980becc-a56b-4ae0-8adf-4d7cb24441cc`, then reloaded all three game clients with identical
+  results and no browser console errors.
 
 ## Remaining
 
