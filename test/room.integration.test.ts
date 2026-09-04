@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { RoomSessionResponse, RoomSnapshot, ServerMessage } from "../src/protocol";
 
 const sockets: WebSocket[] = [];
+let createRequestSequence = 0;
 
 interface StoredRoomHarness {
   phase: "lobby" | "playing" | "finished";
@@ -331,6 +332,21 @@ describe("RoomDO integration", () => {
 
     await expectServerError(connection.inbox, "rate_limited");
   });
+
+  it("rejects malformed, oversized, and binary WebSocket messages", async () => {
+    const host = await createRoom("消息边界测试");
+    const connection = await connect(host);
+    await connection.inbox.waitFor((message) => message.type === "snapshot");
+
+    connection.socket.send("{");
+    await expectServerError(connection.inbox, "invalid_message");
+
+    connection.socket.send(JSON.stringify({ type: "heartbeat", padding: "x".repeat(8_192) }));
+    await expectServerError(connection.inbox, "invalid_message");
+
+    connection.socket.send(new Uint8Array([1, 2, 3]).buffer);
+    await expectServerError(connection.inbox, "invalid_message");
+  });
 });
 
 class MessageInbox {
@@ -379,7 +395,10 @@ class MessageInbox {
 async function createRoom(nickname: string): Promise<RoomSessionResponse> {
   const response = await exports.default.fetch("https://example.com/api/rooms", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "CF-Connecting-IP": `198.51.100.${++createRequestSequence}`,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({ nickname }),
   });
   expect(response.status).toBe(201);

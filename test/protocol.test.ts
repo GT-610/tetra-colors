@@ -39,6 +39,7 @@ describe("protocol validation", () => {
   it("rejects malformed client intents", () => {
     expect(parseClientMessage(null)).toBeNull();
     expect(parseClientMessage({ type: "lobby.add-bot", difficulty: "impossible" })).toBeNull();
+    expect(parseClientMessage({ type: "lobby.remove-bot", playerId: "" })).toBeNull();
     expect(parseClientMessage({ type: "game.play-card", cardId: "" })).toBeNull();
     expect(
       parseClientMessage({ type: "game.play-card", cardId: "card-1", chosenColor: "purple" }),

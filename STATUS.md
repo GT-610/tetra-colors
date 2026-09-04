@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Post-delivery optimization — Batch 4 of 4 completed
+Post-delivery optimization — Complete
 
 ## Completed
 
@@ -124,10 +124,20 @@ Post-delivery optimization — Batch 4 of 4 completed
 - Removed lobby join/leave and game-finished events after the completion audit confirmed that no
   production screen consumes them. Authoritative snapshots remain the source of those state changes,
   and the test suite no longer asserts an event that existed only for tests.
+- Added malformed, oversized, and binary WebSocket message coverage. The additional room scenario
+  exposed shared HTTP-rate-limit state between integration tests, so each room setup now uses an
+  independent reserved test address instead of consuming another test's quota. Six test files now
+  contain 34 passing tests.
+- Ran the updated independent smoke script against a real local Wrangler Worker in room `TBE26`.
+  Two WebSocket clients negotiated the header-based session protocol, entered a three-seat game, and
+  verified private-hand isolation; Wrangler logged two clean `101 Switching Protocols` responses.
+- Re-ran strict unused-symbol checks, CSS reference analysis, removed-symbol and token-URL searches,
+  prohibited tracking/DOM API and trademark scans, dependency advisory checks, and branch diff
+  validation with no outstanding findings.
 
 ## Remaining
 
-- Run final quality gates and live WebSocket smoke testing, then publish the pull request.
+- External review and merge of the optimization pull request.
 
 ## Known issues
 
