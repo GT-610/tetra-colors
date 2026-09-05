@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { copy } from "../client/src/copy";
+import { EVENT_DISPLAY_MS } from "../client/src/ui-timing";
 import type { Card } from "../src/logic";
 import type { RoomSnapshot } from "../src/protocol";
 
@@ -147,7 +148,7 @@ describe("room client session invalidation", () => {
 
     expect(stateSetter(4)).toHaveBeenCalledWith(event);
     expect(timeoutCallbacks).toHaveLength(1);
-    expect(timeoutCallbacks[0]?.delay).toBe(3_000);
+    expect(timeoutCallbacks[0]?.delay).toBe(EVENT_DISPLAY_MS);
 
     timeoutCallbacks[0]?.callback();
     expect(stateSetter(4)).toHaveBeenLastCalledWith(null);

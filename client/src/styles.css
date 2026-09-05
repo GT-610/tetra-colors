@@ -768,7 +768,6 @@ h2 {
 
 .opponent-symbol,
 .result-shape,
-.color-option > span,
 .back-shapes i {
   display: block;
   width: 18px;
@@ -963,29 +962,33 @@ h2 {
   color: #f8fafc;
   background: color-mix(in srgb, var(--table-accent) 18%, #111726);
   box-shadow: 0 0 20px color-mix(in srgb, var(--table-accent) 28%, transparent);
-  animation: direction-change 360ms cubic-bezier(0.18, 0.86, 0.32, 1.2) both;
-  animation-delay: var(--direction-delay);
+  animation: direction-notice var(--direction-duration) linear both;
 }
 
 .direction-label.direction-changing span {
   animation: direction-arrow-spin 360ms ease-out both;
-  animation-delay: var(--direction-delay);
 }
 
-@keyframes direction-change {
-  from {
+@keyframes direction-notice {
+  0% {
     opacity: 0.3;
     transform: translateX(-50%) scale(0.82);
   }
 
-  55% {
+  7% {
     opacity: 1;
     transform: translateX(-50%) scale(1.16);
   }
 
-  to {
+  12%,
+  88% {
     opacity: 1;
     transform: translateX(-50%) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.88);
   }
 }
 
@@ -1470,15 +1473,16 @@ h2 {
 }
 
 .hand-heading {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(44px, 1fr) auto minmax(44px, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   margin-bottom: 11px;
 }
 
-.hand-heading > div {
+.hand-summary {
   display: grid;
+  grid-column: 1;
   gap: 1px;
 }
 
@@ -1493,6 +1497,8 @@ h2 {
 }
 
 .pass-button {
+  grid-column: 3;
+  justify-self: end;
   min-height: 38px;
   padding: 0 14px;
   color: #082f49;
@@ -1539,13 +1545,10 @@ h2 {
 }
 
 .hand-card:disabled .card-face {
-  filter: brightness(0.72) saturate(0.82);
+  filter: saturate(0.42);
 }
 
 .hand-card.playable-card:not(:disabled) .card-face {
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--table-accent) 70%, white 10%),
-    0 16px 36px rgb(0 0 0 / 34%);
   transform: translateY(-6px);
 }
 
@@ -1557,6 +1560,136 @@ h2 {
 .hand-card:focus-visible {
   outline: 3px solid #f8fafc;
   outline-offset: 4px;
+}
+
+.hand-card.color-choice-card .card-face {
+  box-shadow:
+    0 0 0 3px var(--table-accent),
+    0 16px 36px rgb(0 0 0 / 34%);
+  animation: color-card-selected 260ms cubic-bezier(0.18, 0.86, 0.32, 1.2);
+}
+
+.hand-color-picker {
+  display: flex;
+  grid-column: 2;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 0;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: rgb(15 23 42 / 88%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+  animation: color-picker-in 180ms ease-out both;
+}
+
+.hand-color-choice {
+  position: relative;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 50%;
+  background: rgb(255 255 255 / 5%);
+  opacity: 0;
+  animation: color-choice-in 220ms cubic-bezier(0.18, 0.86, 0.32, 1.2) both;
+  animation-delay: calc(var(--color-choice-index) * 35ms);
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 140ms ease;
+}
+
+.hand-color-choice:hover,
+.hand-color-choice:focus-visible {
+  border-color: currentColor;
+  outline: none;
+  background: rgb(255 255 255 / 12%);
+  transform: translateY(-3px) scale(1.08);
+}
+
+.hand-color-choice::after {
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  z-index: 4;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: #f8fafc;
+  background: #111726;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 32%);
+  content: attr(data-label);
+  font-size: 0.62rem;
+  font-weight: 800;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+  white-space: nowrap;
+}
+
+.hand-color-choice:hover::after,
+.hand-color-choice:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.color-choice-symbol {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.choice-coral {
+  color: var(--coral);
+}
+
+.choice-amber {
+  color: var(--amber);
+}
+
+.choice-teal {
+  color: var(--teal);
+}
+
+.choice-azure {
+  color: var(--azure);
+}
+
+@keyframes color-card-selected {
+  from {
+    transform: translateY(-6px) scale(0.96);
+  }
+
+  to {
+    transform: translateY(-6px) scale(1);
+  }
+}
+
+@keyframes color-picker-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.94);
+  }
+}
+
+@keyframes color-choice-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.7);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .hand-card.drawn-card .card-face {
@@ -1573,8 +1706,7 @@ h2 {
   }
 }
 
-.reconnect-overlay,
-.dialog-backdrop {
+.reconnect-overlay {
   position: fixed;
   z-index: 40;
   inset: 0;
@@ -1608,82 +1740,6 @@ h2 {
   font-size: 0.76rem;
   line-height: 1.5;
   text-align: center;
-}
-
-.color-dialog {
-  display: grid;
-  width: min(100%, 440px);
-  gap: 18px;
-  justify-items: center;
-  padding: 26px;
-  border: 1px solid var(--line);
-  border-radius: 26px;
-  background: #111726;
-  box-shadow: 0 35px 100px rgb(0 0 0 / 55%);
-  text-align: center;
-}
-
-.color-dialog .card-face {
-  width: 74px;
-}
-
-.color-dialog .section-kicker {
-  margin-top: 0;
-}
-
-.color-dialog h2 {
-  margin-bottom: 8px;
-}
-
-.color-dialog p:last-child {
-  margin-bottom: 0;
-  color: #94a3b8;
-  font-size: 0.8rem;
-  line-height: 1.5;
-}
-
-.color-options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 9px;
-  width: 100%;
-}
-
-.color-option {
-  display: flex;
-  min-height: 48px;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  color: #f8fafc;
-  background: rgb(255 255 255 / 5%);
-  font-size: 0.78rem;
-  font-weight: 850;
-}
-
-.color-option:hover,
-.color-option:focus-visible {
-  border-color: currentColor;
-  outline: none;
-  background: rgb(255 255 255 / 10%);
-}
-
-.option-coral {
-  color: #fda4b4;
-}
-
-.option-amber {
-  color: #fdba74;
-}
-
-.option-teal {
-  color: #5eead4;
-}
-
-.option-azure {
-  color: #7dd3fc;
 }
 
 .result-shell {
@@ -1914,7 +1970,9 @@ h2 {
   .field select,
   .opponent-chip,
   .card-face,
-  .hand-card {
+  .hand-card,
+  .hand-color-choice,
+  .hand-color-choice::after {
     transition: none;
   }
 
@@ -1928,6 +1986,9 @@ h2 {
   .direction-label.direction-changing,
   .direction-label.direction-changing span,
   .card-flight,
+  .hand-card.color-choice-card .card-face,
+  .hand-color-picker,
+  .hand-color-choice,
   .hand-card.drawn-card .card-face {
     animation: none;
   }

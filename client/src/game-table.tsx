@@ -8,6 +8,7 @@ import {
   CARD_REVEAL_ANIMATION_MS,
 } from "../../src/transition-timing";
 import { copy } from "./copy";
+import { oppositeDirection, requiresColorChoice } from "./game-interaction";
 import { arrangeOpponentSeats, calculateHandLayout } from "./game-layout";
 import {
   buildVisualTransitionPlan,
@@ -17,6 +18,7 @@ import {
   type VisualTransitionPlan,
 } from "./game-transition";
 import type { ConnectionState } from "./room-client";
+import { EVENT_DISPLAY_MS } from "./ui-timing";
 
 const COLOR_ORDER = ["coral", "amber", "teal", "azure"] as const satisfies readonly CardColor[];
 const TURN_DURATION_MS = 30_000;
@@ -60,8 +62,12 @@ interface HandCardStyle extends CSSProperties {
 }
 
 interface DirectionStyle extends CSSProperties {
-  "--direction-delay": string;
+  "--direction-duration": string;
   "--direction-spin": string;
+}
+
+interface ColorChoiceStyle extends CSSProperties {
+  "--color-choice-index": number;
 }
 
 interface SeatStyle extends CSSProperties {
@@ -304,25 +310,34 @@ export function GameTable({
   const selfSkip = skipPresentation(snapshot.selfId, game.skippedPlayerId, transitionPlan);
   const directionEventCommitted =
     latestEvent?.type === "card-played" && latestEvent.card.id === game.topDiscard.id;
-  const directionNoticeActive =
-    directionEventActive && (Boolean(transitionPlan?.directionChange) || directionEventCommitted);
-  const displayedDirection = transitionPlan?.directionChange?.direction ?? game.direction;
+  const directionNoticeActive = directionEventActive;
+  const displayedDirection =
+    transitionPlan?.directionChange?.direction ??
+    (directionNoticeActive && !directionEventCommitted
+      ? oppositeDirection(game.direction)
+      : game.direction);
   const directionStyle = directionNoticeActive
     ? ({
-        "--direction-delay": `${transitionPlan?.directionChange?.startsAt ?? 0}ms`,
+        "--direction-duration": `${EVENT_DISPLAY_MS}ms`,
         "--direction-spin": displayedDirection === 1 ? "360deg" : "-360deg",
       } as DirectionStyle)
     : undefined;
 
   const playCard = (card: Card, source: HTMLElement) => {
     const sourceBounds = source.getBoundingClientRect();
-    if (card.kind === "wild" || card.kind === "wild-draw-four") {
+    if (requiresColorChoice(card)) {
+      if (wildCard?.id === card.id) {
+        pendingCardOriginRef.current = null;
+        setWildCard(null);
+        return;
+      }
       pendingCardOriginRef.current = sourceBounds;
       setWildCard(card);
       return;
     }
     if (onSend({ type: "game.play-card", cardId: card.id })) {
       pendingCardOriginRef.current = sourceBounds;
+      setWildCard(null);
       setPending("play");
     }
   };
@@ -429,7 +444,11 @@ export function GameTable({
             type="button"
             disabled={!isSelfTurn || game.drawnCardId !== null || actionDisabled}
             onClick={() => {
-              if (onSend({ type: "game.draw-card" })) setPending("draw");
+              if (onSend({ type: "game.draw-card" })) {
+                pendingCardOriginRef.current = null;
+                setWildCard(null);
+                setPending("draw");
+              }
             }}
             aria-label={`${copy.drawCard}，剩余 ${game.drawPileCount} 张`}
           >
@@ -466,19 +485,24 @@ export function GameTable({
       >
         {selfSkip.visible ? <SkipBadge /> : null}
         <div className="hand-heading">
-          <div>
+          <div className="hand-summary">
             <span>{copy.yourHand}</span>
             <strong>
               {self?.handCount ?? snapshot.hand.length} {copy.cards}
             </strong>
           </div>
+          {wildCard ? <HandColorPicker disabled={actionDisabled} onChoose={playWild} /> : null}
           {isSelfTurn && game.drawnCardId ? (
             <button
               className="button pass-button"
               type="button"
               disabled={actionDisabled}
               onClick={() => {
-                if (onSend({ type: "game.pass-turn" })) setPending("pass");
+                if (onSend({ type: "game.pass-turn" })) {
+                  pendingCardOriginRef.current = null;
+                  setWildCard(null);
+                  setPending("pass");
+                }
               }}
             >
               {pending === "pass" ? copy.passing : copy.passTurn}
@@ -497,9 +521,11 @@ export function GameTable({
             {snapshot.hand.map((card, index) => {
               const playable = playableCardIds.has(card.id);
               const isDrawn = game.drawnCardId === card.id;
+              const colorChoiceRequired = requiresColorChoice(card);
+              const choosingColor = wildCard?.id === card.id;
               return (
                 <button
-                  className={`hand-card ${playable ? "playable-card" : ""} ${isDrawn ? "drawn-card" : ""} ${playedSelfCardIds.has(card.id) ? "card-origin-hidden" : ""}`}
+                  className={`hand-card ${playable ? "playable-card" : ""} ${isDrawn ? "drawn-card" : ""} ${choosingColor ? "color-choice-card" : ""} ${playedSelfCardIds.has(card.id) ? "card-origin-hidden" : ""}`}
                   type="button"
                   key={card.id}
                   style={
@@ -514,7 +540,12 @@ export function GameTable({
                   }}
                   disabled={!isSelfTurn || !playable || actionDisabled}
                   onClick={(event) => playCard(card, event.currentTarget)}
-                  aria-label={`打出${cardLabel(card)}`}
+                  aria-pressed={colorChoiceRequired ? choosingColor : undefined}
+                  aria-label={
+                    colorChoiceRequired
+                      ? `${copy.chooseColor}：${cardLabel(card)}`
+                      : `打出${cardLabel(card)}`
+                  }
                 >
                   <CardFace card={card} />
                 </button>
@@ -530,17 +561,6 @@ export function GameTable({
           <strong>{copy.connection[connectionState]}</strong>
           <span>{copy.reconnectOverlay}</span>
         </div>
-      ) : null}
-
-      {wildCard ? (
-        <ColorDialog
-          card={wildCard}
-          onChoose={playWild}
-          onClose={() => {
-            pendingCardOriginRef.current = null;
-            setWildCard(null);
-          }}
-        />
       ) : null}
     </main>
   );
@@ -700,48 +720,29 @@ function CardBack() {
   );
 }
 
-function ColorDialog({
-  card,
+function HandColorPicker({
+  disabled,
   onChoose,
-  onClose,
 }: {
-  card: Card;
+  disabled: boolean;
   onChoose: (color: CardColor) => void;
-  onClose: () => void;
 }) {
   return (
-    <div className="dialog-backdrop" role="presentation">
-      <section
-        className="color-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="color-dialog-title"
-      >
-        <CardFace card={card} />
-        <div>
-          <p className="section-kicker">{cardLabel(card)}</p>
-          <h2 id="color-dialog-title">{copy.chooseColor}</h2>
-          <p>{copy.chooseColorHint}</p>
-        </div>
-        <div className="color-options">
-          {COLOR_ORDER.map((color) => (
-            <button
-              className={`color-option option-${color}`}
-              type="button"
-              key={color}
-              onClick={() => onChoose(color)}
-              aria-label={`选择${copy.colors[color]}`}
-            >
-              <span className={`symbol-${color}`} aria-hidden="true" />
-              {copy.colors[color]}
-            </button>
-          ))}
-        </div>
-        <button className="button button-ghost" type="button" onClick={onClose}>
-          {copy.close}
+    <fieldset className="hand-color-picker" aria-label={copy.chooseColor} disabled={disabled}>
+      {COLOR_ORDER.map((color, index) => (
+        <button
+          className={`hand-color-choice choice-${color}`}
+          type="button"
+          key={color}
+          style={{ "--color-choice-index": index } as ColorChoiceStyle}
+          onClick={() => onChoose(color)}
+          aria-label={`选择${copy.colors[color]}`}
+          data-label={copy.colors[color]}
+        >
+          <span className={`color-choice-symbol symbol-${color}`} aria-hidden="true" />
         </button>
-      </section>
-    </div>
+      ))}
+    </fieldset>
   );
 }
 

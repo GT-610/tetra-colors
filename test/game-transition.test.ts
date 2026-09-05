@@ -10,7 +10,6 @@ import type { Card } from "../src/logic";
 import type { RoomEvent, RoomSnapshot } from "../src/protocol";
 import {
   CARD_DEAL_STAGGER_MS,
-  CARD_PLAY_ANIMATION_MS,
   INITIAL_DEAL_STAGGER_MS,
   initialDealDurationMs,
 } from "../src/transition-timing";
@@ -149,7 +148,6 @@ describe("client game transitions", () => {
 
     expect(buildVisualTransitionPlan(transition).directionChange).toEqual({
       direction: -1,
-      startsAt: CARD_PLAY_ANIMATION_MS / 3,
     });
     expect(
       isDirectionChangeEvent({ type: "card-played", playerId: "self", card: reverseCard }),

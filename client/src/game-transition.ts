@@ -3,7 +3,6 @@ import type { RoomEvent, RoomSnapshot } from "../../src/protocol";
 import {
   buildTransitionTimeline,
   CARD_DEAL_STAGGER_MS,
-  CARD_PLAY_ANIMATION_MS,
   INITIAL_DEAL_STAGGER_MS,
   initialDealDurationMs,
   type TransitionTimeline,
@@ -42,7 +41,6 @@ export interface SkipStatusStep {
 
 export interface DirectionChangeStep {
   direction: TurnDirection;
-  startsAt: number;
 }
 
 export interface VisualTransitionPlan {
@@ -114,7 +112,6 @@ export function buildVisualTransitionPlan(transition: RoomTransition): VisualTra
       if (event.card.kind === "reverse" && transition.next.game) {
         directionChange = {
           direction: transition.next.game.direction,
-          startsAt: startsAt + CARD_PLAY_ANIMATION_MS / 3,
         };
       }
     } else if (event.type === "cards-drawn") {

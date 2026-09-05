@@ -203,6 +203,14 @@ Post-delivery interaction refinement — Animated game flow verified locally
   remains visible for the same room-event lifetime as its three-second notice. A 390 × 844 Edge run
   verified both header stacks, notice containment, no page overflow, and a clean browser console;
   the direction-event selector and existing event-expiration behavior remain covered by the tests.
+- Removed the extra border and shadow from ordinary playable-card highlighting; availability now
+  uses only vertical position and saturation. Replaced the modal color dialog with an animated,
+  centered four-shape picker in the hand status row: selecting either color-changing card marks it
+  with the current table color, hovering a shape reveals its color name, and choosing a shape plays
+  the card directly with that color. Direction notices now share the event timing constant and fade
+  out before their three-second lifetime ends. A real 390 × 844 Edge game verified selection,
+  tooltip, direct color commitment, picker centering, no overflow, and a clean console. Thirteen test
+  files now contain 64 passing tests.
 
 ## Remaining
 

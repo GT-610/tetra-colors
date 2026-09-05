@@ -10,10 +10,10 @@ import type {
 import { isRoomSessionResponse } from "../../src/protocol";
 import { copy } from "./copy";
 import { createRoomTransition, type RoomTransition } from "./game-transition";
+import { EVENT_DISPLAY_MS } from "./ui-timing";
 
 const SESSION_KEY = "tetra-colors.session";
 const HEARTBEAT_MS = 15_000;
-const EVENT_DISPLAY_MS = 3_000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
 export type ConnectionState = "idle" | "connecting" | "connected" | "reconnecting" | "disconnected";

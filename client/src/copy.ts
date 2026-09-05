@@ -49,8 +49,6 @@ export const copy = {
   cards: "张牌",
   yourHand: "你的手牌",
   chooseColor: "选择接下来的颜色",
-  chooseColorHint: "功能牌打出后，牌桌将切换到你选择的颜色。",
-  close: "取消",
   reconnectOverlay: "连接正在恢复，操作会在重连后开放。",
   roundFinished: "本局结束",
   youWon: "你率先清空了手牌",
