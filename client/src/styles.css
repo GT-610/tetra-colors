@@ -646,9 +646,10 @@ h2 {
 }
 
 .game-topbar {
-  display: flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 6px 2px;
 }
@@ -672,6 +673,8 @@ h2 {
 
 .game-top-actions {
   display: flex;
+  grid-column: 3;
+  grid-row: 1;
   align-items: center;
   gap: 12px;
 }
@@ -924,20 +927,67 @@ h2 {
 
 .direction-label {
   position: absolute;
+  z-index: 5;
   top: 0;
   left: 50%;
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 99px;
   color: #7f8a9d;
+  background: transparent;
   font-size: 0.64rem;
   font-weight: 800;
+  white-space: nowrap;
   transform: translateX(-50%);
 }
 
 .direction-label span {
   color: var(--table-accent);
   font-size: 1rem;
+}
+
+.direction-label.direction-changing {
+  border-color: color-mix(in srgb, var(--table-accent) 72%, white 12%);
+  color: #f8fafc;
+  background: color-mix(in srgb, var(--table-accent) 18%, #111726);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--table-accent) 28%, transparent);
+  animation: direction-change 360ms cubic-bezier(0.18, 0.86, 0.32, 1.2) both;
+  animation-delay: var(--direction-delay);
+}
+
+.direction-label.direction-changing span {
+  animation: direction-arrow-spin 360ms ease-out both;
+  animation-delay: var(--direction-delay);
+}
+
+@keyframes direction-change {
+  from {
+    opacity: 0.3;
+    transform: translateX(-50%) scale(0.82);
+  }
+
+  55% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.16);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+@keyframes direction-arrow-spin {
+  from {
+    transform: rotate(0deg) scale(0.7);
+  }
+
+  to {
+    transform: rotate(var(--direction-spin)) scale(1);
+  }
 }
 
 .pile-button,
@@ -1167,7 +1217,9 @@ h2 {
 
 .hand-zone > .skip-badge {
   top: 10px;
-  right: 14px;
+  right: auto;
+  left: 50%;
+  translate: -50% 0;
 }
 
 @keyframes skip-player-apply {
@@ -1245,7 +1297,8 @@ h2 {
   box-shadow: 0 13px 30px rgb(0 0 0 / 25%);
   transition:
     transform 160ms ease,
-    box-shadow 160ms ease;
+    box-shadow 160ms ease,
+    filter 160ms ease;
 }
 
 .card-coral {
@@ -1345,29 +1398,48 @@ h2 {
 
 .event-toast,
 .game-error {
-  position: fixed;
   z-index: 15;
-  top: 74px;
-  left: 50%;
   width: max-content;
-  max-width: calc(100vw - 32px);
   margin: 0;
-  padding: 10px 14px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 99px;
   background: rgb(15 23 42 / 92%);
   box-shadow: 0 14px 34px rgb(0 0 0 / 28%);
   font-size: 0.72rem;
   font-weight: 800;
-  transform: translateX(-50%);
-  animation: toast-in 220ms ease-out;
   backdrop-filter: blur(14px);
 }
 
+.event-toast {
+  grid-column: 2;
+  grid-row: 1;
+  width: min(100%, 420px);
+  min-width: 0;
+  justify-self: center;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: header-toast-in 220ms ease-out;
+}
+
 .game-error {
+  position: fixed;
   top: 118px;
+  left: 50%;
+  max-width: calc(100vw - 32px);
   border-color: rgb(251 75 107 / 42%);
   color: #fecdd6;
+  transform: translateX(-50%);
+  animation: toast-in 220ms ease-out;
+}
+
+@keyframes header-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
 }
 
 @keyframes toast-in {
@@ -1445,6 +1517,7 @@ h2 {
   z-index: var(--hand-card-layer);
   scroll-snap-align: start;
   border-radius: 14px;
+  transition: left 220ms ease;
 }
 
 .hand-card .card-face {
@@ -1456,8 +1529,8 @@ h2 {
   z-index: 1000;
 }
 
-.hand-card:disabled {
-  opacity: 0.48;
+.hand-card:disabled .card-face {
+  filter: brightness(0.72) saturate(0.82);
 }
 
 .hand-card.playable-card:not(:disabled) .card-face {
@@ -1489,13 +1562,6 @@ h2 {
   50% {
     transform: translateY(-12px) scale(1.03);
   }
-}
-
-.mobile-draw-button {
-  width: 100%;
-  min-height: 44px;
-  color: #dbeafe;
-  background: rgb(56 189 248 / 15%);
 }
 
 .reconnect-overlay,
@@ -1826,11 +1892,6 @@ h2 {
   .hand-scroller {
     --hand-card-width: 92px;
   }
-
-  .mobile-draw-button {
-    width: min(320px, 100%);
-    margin: 0 auto;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1843,7 +1904,8 @@ h2 {
   .field input,
   .field select,
   .opponent-chip,
-  .card-face {
+  .card-face,
+  .hand-card {
     transition: none;
   }
 
@@ -1854,6 +1916,8 @@ h2 {
 
   .turn-pulse.self-turn,
   .event-toast,
+  .direction-label.direction-changing,
+  .direction-label.direction-changing span,
   .card-flight,
   .hand-card.drawn-card .card-face {
     animation: none;

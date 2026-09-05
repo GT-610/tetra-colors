@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { buildVisualTransitionPlan, createRoomTransition } from "../client/src/game-transition";
+import {
+  buildVisualTransitionPlan,
+  createRoomTransition,
+  projectedHandCount,
+} from "../client/src/game-transition";
 import type { Card } from "../src/logic";
 import type { RoomEvent, RoomSnapshot } from "../src/protocol";
 import {
   CARD_DEAL_STAGGER_MS,
+  CARD_PLAY_ANIMATION_MS,
   INITIAL_DEAL_STAGGER_MS,
   initialDealDurationMs,
 } from "../src/transition-timing";
@@ -24,6 +29,7 @@ describe("client game transitions", () => {
     if (!transition) return;
 
     const plan = buildVisualTransitionPlan(transition);
+    expect(projectedHandCount(1, "self", plan)).toBe(3);
     expect(plan.dealtCards).toEqual([
       {
         type: "deal",
@@ -63,6 +69,7 @@ describe("client game transitions", () => {
       CARD_DEAL_STAGGER_MS * 2,
       CARD_DEAL_STAGGER_MS * 3,
     ]);
+    expect(projectedHandCount(1, "self", plan)).toBe(1);
   });
 
   it("builds a round-robin initial deal from an empty playing table", () => {
@@ -125,6 +132,24 @@ describe("client game transitions", () => {
       { type: "unskip", playerId: "other" },
       { type: "skip", playerId: "next" },
     ]);
+  });
+
+  it("presents the updated direction while a reverse card is animating", () => {
+    const reverseCard: Card = { id: "reverse", kind: "reverse", color: "coral" };
+    const previous = snapshot([reverseCard]);
+    const next = snapshot([]);
+    if (next.game) next.game.direction = -1;
+
+    const transition = createRoomTransition(previous, next, [
+      { type: "card-played", playerId: "self", card: reverseCard },
+    ]);
+    expect(transition).not.toBeNull();
+    if (!transition) return;
+
+    expect(buildVisualTransitionPlan(transition).directionChange).toEqual({
+      direction: -1,
+      startsAt: CARD_PLAY_ANIMATION_MS / 3,
+    });
   });
 });
 

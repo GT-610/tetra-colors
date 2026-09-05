@@ -190,6 +190,14 @@ Post-delivery interaction refinement — Animated game flow verified locally
   Local browser checks covered the opening deal, exact seven-card landing centers, a 13-card mobile
   hand, mouse scrollbar dragging, and clean consoles at 390 × 844 and 1280 × 720. Twelve test files
   now contain 61 passing tests.
+- Reflowed the existing hand toward its projected final layout before a self draw lands, so a single
+  drawn card now reaches its committed slot instead of overlapping the previous last card. Kept all
+  hand cards opaque while dimming unavailable cards with brightness and saturation, removed the
+  redundant mobile draw button, centered the local skip marker, moved notices into a collision-free
+  title-bar column, emphasized direction changes, and removed opponent-type suffixes from table
+  seats. A real 390 × 844 Edge run measured a 0-pixel draw target delta, verified the projected hand
+  spacing, long-notice containment, full card opacity, brightness distinction, centered skip marker,
+  no page overflow, and a clean browser console. Twelve test files now contain 62 passing tests.
 
 ## Remaining
 

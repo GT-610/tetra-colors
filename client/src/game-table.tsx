@@ -11,6 +11,7 @@ import { copy } from "./copy";
 import { arrangeOpponentSeats, calculateHandLayout } from "./game-layout";
 import {
   buildVisualTransitionPlan,
+  projectedHandCount,
   type RoomTransition,
   type VisualTransitionPlan,
 } from "./game-transition";
@@ -55,6 +56,11 @@ interface HandViewport {
 
 interface HandCardStyle extends CSSProperties {
   "--hand-card-layer": number;
+}
+
+interface DirectionStyle extends CSSProperties {
+  "--direction-delay": string;
+  "--direction-spin": string;
 }
 
 interface SeatStyle extends CSSProperties {
@@ -136,9 +142,10 @@ export function GameTable({
     [transition],
   );
   const playableCardIds = new Set(game?.playableCardIds ?? []);
+  const handSlotCount = projectedHandCount(snapshot.hand.length, snapshot.selfId, transitionPlan);
   const handLayout = useMemo(
-    () => calculateHandLayout(handViewport.width, handViewport.cardWidth, snapshot.hand.length),
-    [handViewport, snapshot.hand.length],
+    () => calculateHandLayout(handViewport.width, handViewport.cardWidth, handSlotCount),
+    [handViewport, handSlotCount],
   );
 
   useEffect(() => {
@@ -293,6 +300,13 @@ export function GameTable({
       .map((step) => step.card.id) ?? [],
   );
   const selfSkip = skipPresentation(snapshot.selfId, game.skippedPlayerId, transitionPlan);
+  const displayedDirection = transitionPlan?.directionChange?.direction ?? game.direction;
+  const directionStyle = transitionPlan?.directionChange
+    ? ({
+        "--direction-delay": `${transitionPlan.directionChange.startsAt}ms`,
+        "--direction-spin": displayedDirection === 1 ? "360deg" : "-360deg",
+      } as DirectionStyle)
+    : undefined;
 
   const playCard = (card: Card, source: HTMLElement) => {
     const sourceBounds = source.getBoundingClientRect();
@@ -324,6 +338,9 @@ export function GameTable({
             {copy.room} {snapshot.roomCode}
           </span>
         </div>
+        {latestEvent ? (
+          <EventToast key={JSON.stringify(latestEvent)} event={latestEvent} snapshot={snapshot} />
+        ) : null}
         <div className="game-top-actions">
           <span className={`connection-badge state-${connectionState}`}>
             {copy.connection[connectionState]}
@@ -382,7 +399,6 @@ export function GameTable({
                   <strong>{player.nickname}</strong>
                   <span>
                     {player.handCount} {copy.cards}
-                    {player.isBot ? ` · ${copy.bot}` : ""}
                   </span>
                 </div>
                 {skip.visible ? <SkipBadge /> : null}
@@ -392,9 +408,13 @@ export function GameTable({
         </section>
 
         <section className="table-center" aria-label="牌桌中央">
-          <div className="direction-label">
-            <span>{game.direction === 1 ? "↻" : "↺"}</span>
-            {game.direction === 1 ? copy.directionClockwise : copy.directionCounterClockwise}
+          <div
+            className={`direction-label ${transitionPlan?.directionChange ? "direction-changing" : ""}`}
+            style={directionStyle}
+          >
+            <span>{displayedDirection === 1 ? "↻" : "↺"}</span>
+            {transitionPlan?.directionChange ? `${copy.directionChanged} · ` : ""}
+            {displayedDirection === 1 ? copy.directionClockwise : copy.directionCounterClockwise}
           </div>
 
           <button
@@ -427,9 +447,6 @@ export function GameTable({
         </section>
       </section>
 
-      {latestEvent ? (
-        <EventToast key={JSON.stringify(latestEvent)} event={latestEvent} snapshot={snapshot} />
-      ) : null}
       {error ? (
         <p className="game-error" role="alert">
           {error}
@@ -499,19 +516,6 @@ export function GameTable({
             })}
           </div>
         </div>
-
-        {isSelfTurn && !game.drawnCardId ? (
-          <button
-            className="button mobile-draw-button"
-            type="button"
-            disabled={actionDisabled}
-            onClick={() => {
-              if (onSend({ type: "game.draw-card" })) setPending("draw");
-            }}
-          >
-            {pending === "draw" ? copy.drawing : copy.drawCard}
-          </button>
-        ) : null}
       </section>
 
       {waitingForConnection ? (

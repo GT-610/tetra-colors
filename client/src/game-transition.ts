@@ -1,8 +1,9 @@
-import type { Card } from "../../src/logic";
+import type { Card, TurnDirection } from "../../src/logic";
 import type { RoomEvent, RoomSnapshot } from "../../src/protocol";
 import {
   buildTransitionTimeline,
   CARD_DEAL_STAGGER_MS,
+  CARD_PLAY_ANIMATION_MS,
   INITIAL_DEAL_STAGGER_MS,
   initialDealDurationMs,
   type TransitionTimeline,
@@ -39,11 +40,17 @@ export interface SkipStatusStep {
   startsAt: number;
 }
 
+export interface DirectionChangeStep {
+  direction: TurnDirection;
+  startsAt: number;
+}
+
 export interface VisualTransitionPlan {
   durationMs: number;
   playedCards: PlayedCardStep[];
   dealtCards: DealtCardStep[];
   skipStatuses: SkipStatusStep[];
+  directionChange: DirectionChangeStep | null;
 }
 
 export function createRoomTransition(
@@ -93,6 +100,7 @@ export function buildVisualTransitionPlan(transition: RoomTransition): VisualTra
   const playedCards: PlayedCardStep[] = [];
   const dealtCards: DealtCardStep[] = [];
   const skipStatuses: SkipStatusStep[] = [];
+  let directionChange: DirectionChangeStep | null = null;
 
   for (const [eventIndex, event] of transition.events.entries()) {
     const startsAt = transition.timeline.eventStartsMs[eventIndex] ?? 0;
@@ -103,6 +111,12 @@ export function buildVisualTransitionPlan(transition: RoomTransition): VisualTra
         card: event.card,
         startsAt,
       });
+      if (event.card.kind === "reverse" && transition.next.game) {
+        directionChange = {
+          direction: transition.next.game.direction,
+          startsAt: startsAt + CARD_PLAY_ANIMATION_MS / 3,
+        };
+      }
     } else if (event.type === "cards-drawn") {
       const reveal = event.playerId === transition.previous.selfId;
       for (let cardIndex = 0; cardIndex < event.count; cardIndex += 1) {
@@ -131,7 +145,20 @@ export function buildVisualTransitionPlan(transition: RoomTransition): VisualTra
     playedCards,
     dealtCards,
     skipStatuses,
+    directionChange,
   };
+}
+
+export function projectedHandCount(
+  currentCount: number,
+  selfId: string,
+  plan: VisualTransitionPlan | null,
+): number {
+  return (
+    plan?.dealtCards.find(
+      (step) => step.playerId === selfId && step.targetIndex !== null && step.targetCount !== null,
+    )?.targetCount ?? currentCount
+  );
 }
 
 function buildInitialDealPlan(transition: RoomTransition): VisualTransitionPlan {
@@ -162,6 +189,7 @@ function buildInitialDealPlan(transition: RoomTransition): VisualTransitionPlan 
     playedCards: [],
     dealtCards,
     skipStatuses: [],
+    directionChange: null,
   };
 }
 
