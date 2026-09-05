@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { BotDifficulty, CardColor } from "../../src/logic";
 import {
@@ -8,6 +8,7 @@ import {
   type RoomSnapshot,
 } from "../../src/protocol";
 import { copy } from "./copy";
+import { canAttemptJoin, leaveConfirmation } from "./entry-state";
 import { GameTable, ResultScreen } from "./game-table";
 import { type ConnectionState, useRoomClient } from "./room-client";
 
@@ -22,6 +23,12 @@ const PLAYER_COLORS = ["teal", "azure", "amber", "coral"] as const satisfies rea
 
 export function App() {
   const room = useRoomClient();
+  const visibleSnapshot = room.transition?.previous ?? room.snapshot;
+  const leave = () => {
+    const confirmation = visibleSnapshot ? leaveConfirmation(visibleSnapshot) : null;
+    if (confirmation && !window.confirm(copy.leaveConfirmation[confirmation])) return;
+    room.leave();
+  };
 
   if (!room.session) {
     return (
@@ -35,7 +42,7 @@ export function App() {
     );
   }
 
-  if (!room.snapshot) {
+  if (!visibleSnapshot) {
     return (
       <main className="app-shell centered-shell">
         <section className="panel connecting-panel" aria-live="polite">
@@ -43,7 +50,7 @@ export function App() {
           <div className="spinner" aria-hidden="true" />
           <h1>{room.connectionState === "reconnecting" ? copy.reconnecting : copy.connecting}</h1>
           {room.error ? <p className="error-banner">{room.error}</p> : null}
-          <button className="button button-ghost" type="button" onClick={room.leave}>
+          <button className="button button-ghost" type="button" onClick={leave}>
             {copy.leave}
           </button>
         </section>
@@ -51,30 +58,32 @@ export function App() {
     );
   }
 
-  if (room.snapshot.phase === "lobby") {
+  if (visibleSnapshot.phase === "lobby") {
     return (
       <LobbyScreen
-        snapshot={room.snapshot}
+        snapshot={visibleSnapshot}
         connectionState={room.connectionState}
         error={room.error}
         onSend={room.send}
-        onLeave={room.leave}
+        onLeave={leave}
       />
     );
   }
 
-  if (room.snapshot.phase === "finished") {
-    return <ResultScreen snapshot={room.snapshot} onSend={room.send} onLeave={room.leave} />;
+  if (visibleSnapshot.phase === "finished") {
+    return <ResultScreen snapshot={visibleSnapshot} onSend={room.send} onLeave={leave} />;
   }
 
   return (
     <GameTable
-      snapshot={room.snapshot}
+      snapshot={visibleSnapshot}
       connectionState={room.connectionState}
       error={room.error}
       latestEvent={room.latestEvent}
+      transition={room.transition}
       onSend={room.send}
-      onLeave={room.leave}
+      onTransitionComplete={room.completeTransition}
+      onLeave={leave}
     />
   );
 }
@@ -90,6 +99,8 @@ interface WelcomeScreenProps {
 function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeScreenProps) {
   const [nickname, setNickname] = useState("");
   const [roomCode, setRoomCode] = useState("");
+  const [nicknameMissing, setNicknameMissing] = useState(false);
+  const nicknameRef = useRef<HTMLInputElement | null>(null);
   const normalizedNickname = nickname.trim();
   const normalizedRoomCode = normalizeRoomCode(roomCode);
   const nicknameValid =
@@ -121,15 +132,24 @@ function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeS
         <label className="field">
           <span>{copy.nicknameLabel}</span>
           <input
+            ref={nicknameRef}
             autoComplete="nickname"
+            aria-describedby={nicknameMissing ? "nickname-required" : undefined}
+            aria-invalid={nicknameMissing}
             maxLength={MAX_NICKNAME_LENGTH}
             placeholder={copy.nicknamePlaceholder}
             value={nickname}
             onChange={(event) => {
               setNickname(event.target.value);
+              setNicknameMissing(false);
               onClearError();
             }}
           />
+          {nicknameMissing ? (
+            <span className="field-error" id="nickname-required" role="alert">
+              {copy.nicknameRequired}
+            </span>
+          ) : null}
         </label>
 
         <button
@@ -164,8 +184,13 @@ function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeS
         <button
           className="button button-secondary"
           type="button"
-          disabled={!nicknameValid || !normalizedRoomCode || busy}
+          disabled={!canAttemptJoin(normalizedRoomCode, busy)}
           onClick={() => {
+            if (!nicknameValid) {
+              setNicknameMissing(true);
+              nicknameRef.current?.focus();
+              return;
+            }
             if (normalizedRoomCode) void onJoin(normalizedNickname, normalizedRoomCode);
           }}
         >

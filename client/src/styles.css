@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+@property --table-accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #2dd4bf;
+}
+
 :root {
   color: #f6f7fb;
   background: #07090f;
@@ -51,6 +57,17 @@ select {
 
 button:disabled {
   cursor: not-allowed;
+}
+
+input[aria-invalid="true"] {
+  border-color: var(--coral);
+  box-shadow: 0 0 0 3px rgb(251 75 107 / 16%);
+}
+
+.field-error {
+  color: #fda4b4;
+  font-size: 0.72rem;
+  font-weight: 750;
 }
 
 .app-shell {
@@ -363,8 +380,9 @@ h2 {
 
 .topbar-actions {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
 }
 
 .connection-badge {
@@ -609,6 +627,7 @@ h2 {
       transparent 34rem
     ),
     linear-gradient(155deg, #080b13, #07090f 62%, #0d0b12);
+  transition: --table-accent 360ms ease;
 }
 
 .table-color-coral {
@@ -628,9 +647,10 @@ h2 {
 }
 
 .game-topbar {
-  display: flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 6px 2px;
 }
@@ -654,12 +674,34 @@ h2 {
 
 .game-top-actions {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  grid-column: 3;
+  grid-row: 1;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.topbar-actions .text-button,
+.game-top-actions .text-button {
+  padding: 0;
+  font-size: 0.68rem;
+  line-height: 1.2;
 }
 
 .hand-scroller::-webkit-scrollbar {
-  display: none;
+  height: 8px;
+}
+
+.hand-scroller::-webkit-scrollbar-track {
+  border-radius: 99px;
+  background: rgb(255 255 255 / 6%);
+}
+
+.hand-scroller::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--table-accent) 58%, #64748b);
+  background-clip: padding-box;
 }
 
 .table-stage {
@@ -708,9 +750,24 @@ h2 {
   background: color-mix(in srgb, var(--table-accent) 11%, #111726);
 }
 
+.opponent-chip.is-skipped,
+.opponent-chip.skip-clearing {
+  border-color: rgb(251 75 107 / 45%);
+  filter: saturate(0.45) brightness(0.72);
+}
+
+.opponent-chip.skip-applying {
+  animation: skip-player-apply 360ms ease-out both;
+  animation-delay: var(--skip-delay);
+}
+
+.opponent-chip.skip-clearing {
+  animation: skip-player-clear 360ms ease-out both;
+  animation-delay: var(--skip-delay);
+}
+
 .opponent-symbol,
 .result-shape,
-.color-option > span,
 .back-shapes i {
   display: block;
   width: 18px;
@@ -762,15 +819,29 @@ h2 {
 }
 
 .turn-status {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
   min-height: 46px;
-  padding: 9px 12px;
+  overflow: hidden;
+  padding: 9px 12px 13px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: rgb(17 23 38 / 72%);
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.turn-status.self-turn-status {
+  border-color: color-mix(in srgb, var(--table-accent) 78%, white 12%);
+  background: color-mix(in srgb, var(--table-accent) 9%, #111726);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--table-accent) 28%, transparent),
+    0 0 22px color-mix(in srgb, var(--table-accent) 18%, transparent);
 }
 
 .turn-status > div:first-child {
@@ -797,34 +868,40 @@ h2 {
 }
 
 .turn-timer {
-  display: grid;
-  min-width: 94px;
-  gap: 3px;
+  display: flex;
+  align-items: center;
+  margin-left: auto;
 }
 
 .turn-timer time {
   color: #cbd5e1;
-  font-size: 0.68rem;
+  font-size: 0.82rem;
   font-weight: 900;
   text-align: right;
 }
 
 .turn-timer progress {
-  width: 94px;
-  height: 5px;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 6px;
   overflow: hidden;
   border: 0;
-  border-radius: 99px;
+  border-radius: 0;
   appearance: none;
 }
 
 .turn-timer progress::-webkit-progress-bar {
-  border-radius: 99px;
   background: rgb(255 255 255 / 8%);
 }
 
 .turn-timer progress::-webkit-progress-value {
-  border-radius: 99px;
+  background: var(--table-accent);
+}
+
+.turn-timer progress::-moz-progress-bar {
   background: var(--table-accent);
 }
 
@@ -833,6 +910,10 @@ h2 {
 }
 
 .timer-urgent progress::-webkit-progress-value {
+  background: var(--coral);
+}
+
+.timer-urgent progress::-moz-progress-bar {
   background: var(--coral);
 }
 
@@ -854,20 +935,71 @@ h2 {
 
 .direction-label {
   position: absolute;
+  z-index: 5;
   top: 0;
   left: 50%;
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 99px;
   color: #7f8a9d;
+  background: transparent;
   font-size: 0.64rem;
   font-weight: 800;
+  white-space: nowrap;
   transform: translateX(-50%);
 }
 
 .direction-label span {
   color: var(--table-accent);
   font-size: 1rem;
+}
+
+.direction-label.direction-changing {
+  border-color: color-mix(in srgb, var(--table-accent) 72%, white 12%);
+  color: #f8fafc;
+  background: color-mix(in srgb, var(--table-accent) 18%, #111726);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--table-accent) 28%, transparent);
+  animation: direction-notice var(--direction-duration) linear both;
+}
+
+.direction-label.direction-changing span {
+  animation: direction-arrow-spin 360ms ease-out both;
+}
+
+@keyframes direction-notice {
+  0% {
+    opacity: 0.3;
+    transform: translateX(-50%) scale(0.82);
+  }
+
+  7% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.16);
+  }
+
+  12%,
+  88% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.88);
+  }
+}
+
+@keyframes direction-arrow-spin {
+  from {
+    transform: rotate(0deg) scale(0.7);
+  }
+
+  to {
+    transform: rotate(var(--direction-spin)) scale(1);
+  }
 }
 
 .pile-button,
@@ -917,11 +1049,108 @@ h2 {
   z-index: 3;
   top: var(--flight-from-y);
   left: var(--flight-from-x);
+  opacity: 0;
   pointer-events: none;
   animation: card-flight var(--flight-duration) cubic-bezier(0.22, 0.78, 0.25, 1) forwards;
+  animation-delay: var(--flight-delay);
+  animation-fill-mode: both;
   transform: translate(-50%, -50%) scale(var(--flight-from-scale)) rotate(-5deg);
   transform-origin: center;
   will-change: top, left, opacity, transform;
+}
+
+.deal-flight {
+  position: absolute;
+  z-index: 3;
+  top: var(--deal-from-y);
+  left: var(--deal-from-x);
+  width: var(--deal-width);
+  opacity: 0;
+  pointer-events: none;
+  animation: deal-flight-opponent var(--deal-duration) cubic-bezier(0.22, 0.78, 0.25, 1) both;
+  animation-delay: var(--deal-delay);
+  transform: translate(-50%, -50%) scale(0.96) rotate(-4deg);
+  transform-origin: center;
+  will-change: top, left, opacity, transform;
+}
+
+.deal-flight-self {
+  z-index: 7;
+  animation-name: deal-flight-self;
+}
+
+.deal-card {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 0.68;
+  transform-style: preserve-3d;
+}
+
+.deal-card-reveal {
+  animation: deal-card-reveal var(--deal-reveal-duration) ease-in-out both;
+  animation-delay: var(--deal-reveal-delay);
+}
+
+.deal-card-side {
+  position: absolute;
+  inset: 0;
+  display: block;
+  backface-visibility: hidden;
+}
+
+.deal-card-side > .card-face {
+  width: 100%;
+  height: 100%;
+}
+
+.deal-card-front {
+  transform: rotateY(180deg);
+}
+
+@keyframes deal-flight-opponent {
+  0% {
+    opacity: 0;
+  }
+
+  8%,
+  82% {
+    opacity: 1;
+  }
+
+  to {
+    top: var(--deal-to-y);
+    left: var(--deal-to-x);
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5) rotate(6deg);
+  }
+}
+
+@keyframes deal-flight-self {
+  0% {
+    opacity: 0;
+  }
+
+  8% {
+    opacity: 1;
+  }
+
+  to {
+    top: var(--deal-to-y);
+    left: var(--deal-to-x);
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(var(--deal-to-scale)) rotate(0deg);
+  }
+}
+
+@keyframes deal-card-reveal {
+  from {
+    transform: rotateY(0deg);
+  }
+
+  to {
+    transform: rotateY(180deg);
+  }
 }
 
 .card-flight-self {
@@ -945,8 +1174,107 @@ h2 {
   to {
     top: var(--flight-to-y);
     left: var(--flight-to-x);
-    opacity: 0;
+    opacity: 1;
     transform: translate(-50%, -50%) scale(1) rotate(3deg);
+  }
+}
+
+.skip-badge {
+  position: absolute;
+  z-index: 8;
+  top: -11px;
+  right: -11px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 2px solid #fecdd6;
+  border-radius: 50%;
+  background: #9f1239;
+  box-shadow: 0 7px 20px rgb(159 18 57 / 48%);
+}
+
+.skip-badge > span {
+  width: 18px;
+  height: 3px;
+  border-radius: 99px;
+  background: #fff1f2;
+  transform: rotate(-42deg);
+}
+
+.skip-applying .skip-badge {
+  animation: skip-badge-apply 360ms cubic-bezier(0.18, 0.86, 0.32, 1.2) both;
+  animation-delay: var(--skip-delay);
+}
+
+.skip-clearing .skip-badge {
+  animation: skip-badge-clear 360ms ease-in both;
+  animation-delay: var(--skip-delay);
+}
+
+.hand-zone.is-skipped,
+.hand-zone.skip-clearing {
+  filter: saturate(0.55) brightness(0.78);
+}
+
+.hand-zone.skip-applying {
+  animation: skip-player-apply 360ms ease-out both;
+  animation-delay: var(--skip-delay);
+}
+
+.hand-zone.skip-clearing {
+  animation: skip-player-clear 360ms ease-out both;
+  animation-delay: var(--skip-delay);
+}
+
+.hand-zone > .skip-badge {
+  top: 10px;
+  right: auto;
+  left: 50%;
+  translate: -50% 0;
+}
+
+@keyframes skip-player-apply {
+  from {
+    filter: saturate(1) brightness(1);
+  }
+
+  to {
+    filter: saturate(0.45) brightness(0.72);
+  }
+}
+
+@keyframes skip-player-clear {
+  from {
+    filter: saturate(0.45) brightness(0.72);
+  }
+
+  to {
+    filter: saturate(1) brightness(1);
+  }
+}
+
+@keyframes skip-badge-apply {
+  from {
+    opacity: 0;
+    transform: scale(1.8) rotate(-24deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes skip-badge-clear {
+  from {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.55) rotate(18deg);
   }
 }
 
@@ -981,7 +1309,8 @@ h2 {
   box-shadow: 0 13px 30px rgb(0 0 0 / 25%);
   transition:
     transform 160ms ease,
-    box-shadow 160ms ease;
+    box-shadow 160ms ease,
+    filter 160ms ease;
 }
 
 .card-coral {
@@ -1081,29 +1410,48 @@ h2 {
 
 .event-toast,
 .game-error {
-  position: fixed;
   z-index: 15;
-  top: 74px;
-  left: 50%;
   width: max-content;
-  max-width: calc(100vw - 32px);
   margin: 0;
-  padding: 10px 14px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 99px;
   background: rgb(15 23 42 / 92%);
   box-shadow: 0 14px 34px rgb(0 0 0 / 28%);
   font-size: 0.72rem;
   font-weight: 800;
-  transform: translateX(-50%);
-  animation: toast-in 220ms ease-out;
   backdrop-filter: blur(14px);
 }
 
+.event-toast {
+  grid-column: 2;
+  grid-row: 1;
+  width: min(100%, 420px);
+  min-width: 0;
+  justify-self: center;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: header-toast-in 220ms ease-out;
+}
+
 .game-error {
+  position: fixed;
   top: 118px;
+  left: 50%;
+  max-width: calc(100vw - 32px);
   border-color: rgb(251 75 107 / 42%);
   color: #fecdd6;
+  transform: translateX(-50%);
+  animation: toast-in 220ms ease-out;
+}
+
+@keyframes header-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
 }
 
 @keyframes toast-in {
@@ -1125,15 +1473,16 @@ h2 {
 }
 
 .hand-heading {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(44px, 1fr) auto minmax(44px, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   margin-bottom: 11px;
 }
 
-.hand-heading > div {
+.hand-summary {
   display: grid;
+  grid-column: 1;
   gap: 1px;
 }
 
@@ -1148,6 +1497,8 @@ h2 {
 }
 
 .pass-button {
+  grid-column: 3;
+  justify-self: end;
   min-height: 38px;
   padding: 0 14px;
   color: #082f49;
@@ -1156,32 +1507,48 @@ h2 {
 }
 
 .hand-scroller {
+  --hand-card-width: 76px;
   display: flex;
-  gap: 7px;
   overflow-x: auto;
-  padding: 15px 4px 13px;
+  overflow-y: hidden;
+  padding: 0 4px 7px;
+  overscroll-behavior-inline: contain;
   scroll-snap-type: x proximity;
-  scrollbar-width: none;
+  scrollbar-color: color-mix(in srgb, var(--table-accent) 58%, #64748b) rgb(255 255 255 / 6%);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  touch-action: pan-x;
+}
+
+.hand-track {
+  position: relative;
+  flex: 0 0 auto;
+  margin-inline: auto;
 }
 
 .hand-card {
-  flex: 0 0 auto;
-  scroll-snap-align: center;
+  position: absolute;
+  top: 15px;
+  z-index: var(--hand-card-layer);
+  scroll-snap-align: start;
   border-radius: 14px;
+  transition: left 220ms ease;
 }
 
 .hand-card .card-face {
-  width: 76px;
+  width: var(--hand-card-width);
 }
 
-.hand-card:disabled {
-  opacity: 0.48;
+.hand-card:hover,
+.hand-card:focus-visible {
+  z-index: 1000;
+}
+
+.hand-card:disabled .card-face {
+  filter: brightness(0.72) saturate(0.82);
 }
 
 .hand-card.playable-card:not(:disabled) .card-face {
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--table-accent) 70%, white 10%),
-    0 16px 36px rgb(0 0 0 / 34%);
   transform: translateY(-6px);
 }
 
@@ -1195,8 +1562,142 @@ h2 {
   outline-offset: 4px;
 }
 
+.hand-card.color-choice-card .card-face {
+  box-shadow:
+    0 0 0 3px var(--table-accent),
+    0 16px 36px rgb(0 0 0 / 34%);
+  animation: color-card-selected 260ms cubic-bezier(0.18, 0.86, 0.32, 1.2);
+}
+
+.hand-color-picker {
+  display: flex;
+  grid-column: 2;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 0;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: rgb(15 23 42 / 88%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+  animation: color-picker-in 180ms ease-out both;
+}
+
+.hand-color-choice {
+  position: relative;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 50%;
+  background: rgb(255 255 255 / 5%);
+  opacity: 0;
+  animation: color-choice-in 220ms cubic-bezier(0.18, 0.86, 0.32, 1.2) both;
+  animation-delay: calc(var(--color-choice-index) * 35ms);
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 140ms ease;
+}
+
+.hand-color-choice:hover,
+.hand-color-choice:focus-visible {
+  border-color: currentColor;
+  outline: none;
+  background: rgb(255 255 255 / 12%);
+  transform: translateY(-3px) scale(1.08);
+}
+
+.hand-color-choice::after {
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  z-index: 4;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: #f8fafc;
+  background: #111726;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 32%);
+  content: attr(data-label);
+  font-size: 0.62rem;
+  font-weight: 800;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+  white-space: nowrap;
+}
+
+.hand-color-choice:hover::after,
+.hand-color-choice:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.color-choice-symbol {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.choice-coral {
+  color: var(--coral);
+}
+
+.choice-amber {
+  color: var(--amber);
+}
+
+.choice-teal {
+  color: var(--teal);
+}
+
+.choice-azure {
+  color: var(--azure);
+}
+
+@keyframes color-card-selected {
+  from {
+    transform: translateY(-6px) scale(0.96);
+  }
+
+  to {
+    transform: translateY(-6px) scale(1);
+  }
+}
+
+@keyframes color-picker-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.94);
+  }
+}
+
+@keyframes color-choice-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.7);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .hand-card.drawn-card .card-face {
   animation: drawn-pop 300ms ease-out;
+}
+
+.hand-card.card-origin-hidden {
+  opacity: 0;
 }
 
 @keyframes drawn-pop {
@@ -1205,15 +1706,7 @@ h2 {
   }
 }
 
-.mobile-draw-button {
-  width: 100%;
-  min-height: 44px;
-  color: #dbeafe;
-  background: rgb(56 189 248 / 15%);
-}
-
-.reconnect-overlay,
-.dialog-backdrop {
+.reconnect-overlay {
   position: fixed;
   z-index: 40;
   inset: 0;
@@ -1247,82 +1740,6 @@ h2 {
   font-size: 0.76rem;
   line-height: 1.5;
   text-align: center;
-}
-
-.color-dialog {
-  display: grid;
-  width: min(100%, 440px);
-  gap: 18px;
-  justify-items: center;
-  padding: 26px;
-  border: 1px solid var(--line);
-  border-radius: 26px;
-  background: #111726;
-  box-shadow: 0 35px 100px rgb(0 0 0 / 55%);
-  text-align: center;
-}
-
-.color-dialog .card-face {
-  width: 74px;
-}
-
-.color-dialog .section-kicker {
-  margin-top: 0;
-}
-
-.color-dialog h2 {
-  margin-bottom: 8px;
-}
-
-.color-dialog p:last-child {
-  margin-bottom: 0;
-  color: #94a3b8;
-  font-size: 0.8rem;
-  line-height: 1.5;
-}
-
-.color-options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 9px;
-  width: 100%;
-}
-
-.color-option {
-  display: flex;
-  min-height: 48px;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  color: #f8fafc;
-  background: rgb(255 255 255 / 5%);
-  font-size: 0.78rem;
-  font-weight: 850;
-}
-
-.color-option:hover,
-.color-option:focus-visible {
-  border-color: currentColor;
-  outline: none;
-  background: rgb(255 255 255 / 10%);
-}
-
-.option-coral {
-  color: #fda4b4;
-}
-
-.option-amber {
-  color: #fdba74;
-}
-
-.option-teal {
-  color: #5eead4;
-}
-
-.option-azure {
-  color: #7dd3fc;
 }
 
 .result-shell {
@@ -1449,17 +1866,13 @@ h2 {
     width: 104px;
   }
 
-  .hand-card .card-face {
-    width: 86px;
-  }
-
   .hand-zone {
     margin-inline: -22px;
     padding-inline: 22px;
   }
 
   .hand-scroller {
-    justify-content: center;
+    --hand-card-width: 86px;
   }
 }
 
@@ -1541,13 +1954,8 @@ h2 {
     padding-inline: 36px;
   }
 
-  .hand-card .card-face {
-    width: 92px;
-  }
-
-  .mobile-draw-button {
-    width: min(320px, 100%);
-    margin: 0 auto;
+  .hand-scroller {
+    --hand-card-width: 92px;
   }
 }
 
@@ -1561,18 +1969,40 @@ h2 {
   .field input,
   .field select,
   .opponent-chip,
-  .card-face {
+  .card-face,
+  .hand-card,
+  .hand-color-choice,
+  .hand-color-choice::after {
+    transition: none;
+  }
+
+  .game-shell,
+  .turn-status {
     transition: none;
   }
 
   .turn-pulse.self-turn,
   .event-toast,
+  .direction-label.direction-changing,
+  .direction-label.direction-changing span,
   .card-flight,
+  .deal-flight,
+  .deal-card-reveal,
+  .opponent-chip.skip-applying,
+  .opponent-chip.skip-clearing,
+  .hand-zone.skip-applying,
+  .hand-zone.skip-clearing,
+  .skip-applying .skip-badge,
+  .skip-clearing .skip-badge,
+  .hand-card.color-choice-card .card-face,
+  .hand-color-picker,
+  .hand-color-choice,
   .hand-card.drawn-card .card-face {
     animation: none;
   }
 
-  .card-flight {
+  .card-flight,
+  .deal-flight {
     display: none;
   }
 }

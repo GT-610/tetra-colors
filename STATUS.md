@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Post-delivery optimization — Complete
+Post-delivery interaction refinement — Animated game flow verified locally
 
 ## Completed
 
@@ -150,10 +150,83 @@ Post-delivery optimization — Complete
 - Switched the game shell to the dynamic viewport height and raised the isolated table-stage
   stacking context above the hand zone. A 390 × 844 browser check resolved the shell to the full
   844-pixel viewport and confirmed table-stage layer 6 above hand-zone layer 5; all 40 tests pass.
+- Destroyed rooms immediately when their last human-controlled seat leaves, including mixed bot
+  lobbies and active games, while retaining bot takeover when another human remains. Added
+  phase-aware exit confirmations, enabled room lookup from a valid room code, expanded the turn
+  timer across the status banner, and randomized bot actions over an inclusive 1–5 second range.
+  Type checking, linting, the production build, and 46 tests pass.
+- Added authoritative visual-transition windows that reject actions until animations finish, delay
+  the next turn clock and bot schedule accordingly, and persist across Durable Object hibernation.
+  Skip cards now retain the skipped player in game state until the following acting player completes
+  an action, with paired skip/unskip events for consecutive skips. The shared half-flight deal
+  timing, state invariants, protocol views, and RoomDO behavior are covered by 51 passing tests.
+- Buffered ordered room events with their authoritative snapshots so the client keeps the previous
+  turn visible and disables actions until each animation completes. Played cards now fly from the
+  acting seat, drawn cards leave the top of the pile one by one, self draws flip independently at
+  the right edge of the hand, opponent draws stay face-down, and skip markers animate on and off.
+  A valid room code also enables joining before nickname validation; an empty nickname now shows an
+  inline alert, marks the field invalid, and focuses it. Twelve test files now contain 56 passing
+  tests.
+- Verified the synchronized client locally at 390 × 844 and 1920 × 960 with no page overflow. The
+  full-width turn bar, equal-sized status and countdown text, stage/hand stacking, snapshot freeze,
+  disabled controls, self draw reveal, played-card flight, and delayed state commit all matched the
+  intended behavior. The browser console contained no warnings or errors. The independent local
+  WebSocket smoke test also passed in room `V589B` with two connections, three seats, and hidden-hand
+  isolation verified.
+- Moved self-deal hand scrolling out of the pre-animation measurement frame. The completed
+  transition now records whether it dealt to the local player, commits the authoritative next
+  snapshot, and scrolls only after the updated hand renders. A local browser check kept the old
+  seven-card hand during the animation and rendered the eighth card only after completion; all 56
+  tests continue to pass.
+- Added a shared opening-deal window that freezes authoritative player actions, delays the turn
+  deadline and bot scheduler, and animates the initial seven cards around the table in dealing
+  order. Each local card now lands on its own final hand slot before the authoritative hand renders.
+- Replaced full-width hand rows with an adaptive original overlap layout that retains a usable edge
+  for every card, falls back to horizontal overflow for very large hands, and exposes a thin mouse-
+  draggable scrollbar without removing touch swiping. The same layout calculation drives deal
+  animation targets.
+- Kept played-card flights visible over the previous discard until the next snapshot commits, added
+  a current-color transition, and highlighted the full turn banner when the local player can act.
+  Local browser checks covered the opening deal, exact seven-card landing centers, a 13-card mobile
+  hand, mouse scrollbar dragging, and clean consoles at 390 × 844 and 1280 × 720. Twelve test files
+  now contain 61 passing tests.
+- Reflowed the existing hand toward its projected final layout before a self draw lands, so a single
+  drawn card now reaches its committed slot instead of overlapping the previous last card. Kept all
+  hand cards opaque while dimming unavailable cards with brightness and saturation, removed the
+  redundant mobile draw button, centered the local skip marker, moved notices into a collision-free
+  title-bar column, emphasized direction changes, and removed opponent-type suffixes from table
+  seats. A real 390 × 844 Edge run measured a 0-pixel draw target delta, verified the projected hand
+  spacing, long-notice containment, full card opacity, brightness distinction, centered skip marker,
+  no page overflow, and a clean browser console. Twelve test files now contain 62 passing tests.
+- Stacked the connection state above the leave action in both lobby and game headers to reclaim
+  horizontal space. Direction-change feedback now survives the authoritative transition commit and
+  remains visible for the same room-event lifetime as its three-second notice. A 390 × 844 Edge run
+  verified both header stacks, notice containment, no page overflow, and a clean browser console;
+  the direction-event selector and existing event-expiration behavior remain covered by the tests.
+- Removed the extra border and shadow from ordinary playable-card highlighting; availability now
+  uses vertical position plus opaque brightness and saturation changes. Replaced the modal color
+  dialog with an animated, centered four-shape picker in the hand status row: selecting either
+  color-changing card marks it
+  with the current table color, hovering a shape reveals its color name, and choosing a shape plays
+  the card directly with that color. Direction notices now share the event timing constant and fade
+  out before their three-second lifetime ends. A real 390 × 844 Edge game verified selection,
+  tooltip, direct color commitment, picker centering, no overflow, and a clean console. Thirteen test
+  files now contain 64 passing tests.
+- Hardened the final animation edge cases found in branch review: repeated skip events for the same
+  player now resolve to the final status, consecutive reverse cards remount the direction notice so
+  each event receives a complete entrance and exit cycle, and reduced-motion mode suppresses deal,
+  reveal, and skip animations alongside the existing effects. Thirteen test files now contain 66
+  passing tests.
+- Applied the same last-human cleanup rule to reconnect-grace expiration: bot-only lobbies and active
+  games are destroyed before host reassignment or bot scheduling, while rooms with another
+  human-controlled seat retain their reconnect and rematch lifecycle. Shared card aspect-ratio and
+  hand-track offset constants now keep rendered hand height and deal landing geometry synchronized.
+  Thirteen test files now contain 68 passing tests.
 
 ## Remaining
 
-- External review and merge of the optimization pull request.
+- Merge `feat/animated-game-flow` into `main` when ready; the repository's automatic Workers build
+  will deploy the merged changes.
 
 ## Known issues
 

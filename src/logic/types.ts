@@ -46,6 +46,7 @@ export interface GameState {
   turnIndex: number;
   direction: TurnDirection;
   drawnCardId: string | null;
+  skippedPlayerId: string | null;
   winnerId: string | null;
   turnNumber: number;
   config: GameConfig;
@@ -70,6 +71,8 @@ export type GameErrorCode =
 export type GameEvent =
   | { type: "card-played"; playerId: string; card: Card }
   | { type: "cards-drawn"; playerId: string; count: number }
+  | { type: "player-skipped"; playerId: string }
+  | { type: "player-unskipped"; playerId: string }
   | { type: "turn-started" };
 
 export type GameResult =
