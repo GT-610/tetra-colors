@@ -1986,6 +1986,14 @@ h2 {
   .direction-label.direction-changing,
   .direction-label.direction-changing span,
   .card-flight,
+  .deal-flight,
+  .deal-card-reveal,
+  .opponent-chip.skip-applying,
+  .opponent-chip.skip-clearing,
+  .hand-zone.skip-applying,
+  .hand-zone.skip-clearing,
+  .skip-applying .skip-badge,
+  .skip-clearing .skip-badge,
   .hand-card.color-choice-card .card-face,
   .hand-color-picker,
   .hand-color-choice,
@@ -1993,7 +2001,8 @@ h2 {
     animation: none;
   }
 
-  .card-flight {
+  .card-flight,
+  .deal-flight {
     display: none;
   }
 }

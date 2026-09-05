@@ -4,6 +4,7 @@ import {
   buildVisualTransitionPlan,
   createRoomTransition,
   isDirectionChangeEvent,
+  latestSkipStatusForPlayer,
   projectedHandCount,
 } from "../client/src/game-transition";
 import type { Card } from "../src/logic";
@@ -132,6 +133,19 @@ describe("client game transitions", () => {
       { type: "unskip", playerId: "other" },
       { type: "skip", playerId: "next" },
     ]);
+  });
+
+  it("uses the final skip event when the same player is skipped again", () => {
+    const transition = createRoomTransition(snapshot([oldCard]), snapshot([]), [
+      { type: "player-unskipped", playerId: "other" },
+      { type: "card-played", playerId: "self", card: oldCard },
+      { type: "player-skipped", playerId: "other" },
+    ]);
+    expect(transition).not.toBeNull();
+    if (!transition) return;
+
+    const plan = buildVisualTransitionPlan(transition);
+    expect(latestSkipStatusForPlayer(plan, "other")?.type).toBe("skip");
   });
 
   it("presents the updated direction while a reverse card is animating", () => {

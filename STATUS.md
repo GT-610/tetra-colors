@@ -212,11 +212,16 @@ Post-delivery interaction refinement — Animated game flow verified locally
   out before their three-second lifetime ends. A real 390 × 844 Edge game verified selection,
   tooltip, direct color commitment, picker centering, no overflow, and a clean console. Thirteen test
   files now contain 64 passing tests.
+- Hardened the final animation edge cases found in branch review: repeated skip events for the same
+  player now resolve to the final status, consecutive reverse cards remount the direction notice so
+  each event receives a complete entrance and exit cycle, and reduced-motion mode suppresses deal,
+  reveal, and skip animations alongside the existing effects. Thirteen test files now contain 66
+  passing tests.
 
 ## Remaining
 
-- Push the local animated game-flow commits when requested; changes merged to `main` will deploy
-  through the repository's automatic Workers build.
+- Merge `feat/animated-game-flow` into `main` when ready; the repository's automatic Workers build
+  will deploy the merged changes.
 
 ## Known issues
 

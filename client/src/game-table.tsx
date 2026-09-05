@@ -8,11 +8,12 @@ import {
   CARD_REVEAL_ANIMATION_MS,
 } from "../../src/transition-timing";
 import { copy } from "./copy";
-import { oppositeDirection, requiresColorChoice } from "./game-interaction";
+import { directionNoticeKey, oppositeDirection, requiresColorChoice } from "./game-interaction";
 import { arrangeOpponentSeats, calculateHandLayout } from "./game-layout";
 import {
   buildVisualTransitionPlan,
   isDirectionChangeEvent,
+  latestSkipStatusForPlayer,
   projectedHandCount,
   type RoomTransition,
   type VisualTransitionPlan,
@@ -430,6 +431,7 @@ export function GameTable({
 
         <section className="table-center" aria-label="牌桌中央">
           <div
+            key={directionNoticeKey(latestEvent)}
             className={`direction-label ${directionNoticeActive ? "direction-changing" : ""}`}
             style={directionStyle}
           >
@@ -779,7 +781,7 @@ function skipPresentation(
   skippedPlayerId: string | null,
   plan: VisualTransitionPlan | null,
 ): { className: string; delay: number; visible: boolean } {
-  const effect = plan?.skipStatuses.find((status) => status.playerId === playerId);
+  const effect = latestSkipStatusForPlayer(plan, playerId);
   const isSkipped = skippedPlayerId === playerId;
   return {
     className: effect

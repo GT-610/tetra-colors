@@ -158,6 +158,18 @@ export function projectedHandCount(
   );
 }
 
+export function latestSkipStatusForPlayer(
+  plan: VisualTransitionPlan | null,
+  playerId: string,
+): SkipStatusStep | undefined {
+  if (!plan) return undefined;
+  for (let index = plan.skipStatuses.length - 1; index >= 0; index -= 1) {
+    const status = plan.skipStatuses[index];
+    if (status?.playerId === playerId) return status;
+  }
+  return undefined;
+}
+
 export function isDirectionChangeEvent(event: RoomEvent | null): boolean {
   return event?.type === "card-played" && event.card.kind === "reverse";
 }
