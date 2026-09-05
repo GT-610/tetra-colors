@@ -46,6 +46,7 @@ export const copy = {
   passing: "正在结束…",
   yourTurn: "轮到你了",
   theirTurn: "正在行动",
+  dealing: "正在发牌，请稍候",
   cards: "张牌",
   yourHand: "你的手牌",
   chooseColor: "选择接下来的颜色",

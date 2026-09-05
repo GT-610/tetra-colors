@@ -2,6 +2,7 @@ export const CARD_PLAY_ANIMATION_MS = 560;
 export const CARD_DEAL_ANIMATION_MS = 560;
 export const CARD_DEAL_STAGGER_MS = CARD_DEAL_ANIMATION_MS / 2;
 export const CARD_REVEAL_ANIMATION_MS = 320;
+export const INITIAL_DEAL_STAGGER_MS = 120;
 export const SKIP_STATUS_ANIMATION_MS = 360;
 
 interface TimedEvent {
@@ -12,6 +13,16 @@ interface TimedEvent {
 export interface TransitionTimeline {
   durationMs: number;
   eventStartsMs: number[];
+}
+
+export function initialDealDurationMs(cardCount: number): number {
+  const normalizedCount = Math.max(0, Math.floor(cardCount));
+  if (normalizedCount === 0) return 0;
+  return (
+    CARD_DEAL_ANIMATION_MS +
+    INITIAL_DEAL_STAGGER_MS * (normalizedCount - 1) +
+    CARD_REVEAL_ANIMATION_MS
+  );
 }
 
 export function buildTransitionTimeline(events: readonly TimedEvent[]): TransitionTimeline {

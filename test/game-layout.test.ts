@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { arrangeOpponentSeats } from "../client/src/game-layout";
+import { arrangeOpponentSeats, calculateHandLayout } from "../client/src/game-layout";
 import type { PublicPlayer } from "../src/protocol";
 
 describe("game table seating", () => {
@@ -39,6 +39,31 @@ describe("game table seating", () => {
         expect(seats[1]?.top).toBeLessThan(seats[0]?.top ?? 0);
       }
     }
+  });
+});
+
+describe("hand layout", () => {
+  it("keeps natural spacing when the full hand fits", () => {
+    expect(calculateHandLayout(800, 92, 7)).toEqual({
+      cardWidth: 92,
+      step: 99,
+      contentWidth: 686,
+      overflowing: false,
+    });
+  });
+
+  it("overlaps cards just enough to fit a narrow viewport", () => {
+    const layout = calculateHandLayout(360, 76, 7);
+    expect(layout.step).toBeCloseTo((360 - 76) / 6);
+    expect(layout.contentWidth).toBeCloseTo(360);
+    expect(layout.overflowing).toBe(false);
+  });
+
+  it("preserves a usable exposed edge and overflows when the hand is very large", () => {
+    const layout = calculateHandLayout(360, 76, 15);
+    expect(layout.step).toBeCloseTo(76 * 0.36);
+    expect(layout.contentWidth).toBeGreaterThan(360);
+    expect(layout.overflowing).toBe(true);
   });
 });
 

@@ -23,8 +23,9 @@ const PLAYER_COLORS = ["teal", "azure", "amber", "coral"] as const satisfies rea
 
 export function App() {
   const room = useRoomClient();
+  const visibleSnapshot = room.transition?.previous ?? room.snapshot;
   const leave = () => {
-    const confirmation = room.snapshot ? leaveConfirmation(room.snapshot) : null;
+    const confirmation = visibleSnapshot ? leaveConfirmation(visibleSnapshot) : null;
     if (confirmation && !window.confirm(copy.leaveConfirmation[confirmation])) return;
     room.leave();
   };
@@ -41,7 +42,7 @@ export function App() {
     );
   }
 
-  if (!room.snapshot) {
+  if (!visibleSnapshot) {
     return (
       <main className="app-shell centered-shell">
         <section className="panel connecting-panel" aria-live="polite">
@@ -57,10 +58,10 @@ export function App() {
     );
   }
 
-  if (room.snapshot.phase === "lobby") {
+  if (visibleSnapshot.phase === "lobby") {
     return (
       <LobbyScreen
-        snapshot={room.snapshot}
+        snapshot={visibleSnapshot}
         connectionState={room.connectionState}
         error={room.error}
         onSend={room.send}
@@ -69,13 +70,13 @@ export function App() {
     );
   }
 
-  if (room.snapshot.phase === "finished") {
-    return <ResultScreen snapshot={room.snapshot} onSend={room.send} onLeave={leave} />;
+  if (visibleSnapshot.phase === "finished") {
+    return <ResultScreen snapshot={visibleSnapshot} onSend={room.send} onLeave={leave} />;
   }
 
   return (
     <GameTable
-      snapshot={room.snapshot}
+      snapshot={visibleSnapshot}
       connectionState={room.connectionState}
       error={room.error}
       latestEvent={room.latestEvent}

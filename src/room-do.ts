@@ -15,7 +15,7 @@ import {
   type ServerMessage,
 } from "./protocol";
 import { botDelayMs } from "./room-timing";
-import { buildTransitionTimeline } from "./transition-timing";
+import { buildTransitionTimeline, initialDealDurationMs } from "./transition-timing";
 
 const ROOM_STORAGE_KEY = "room";
 const MAX_PLAYERS = 6;
@@ -400,8 +400,12 @@ export class RoomDO extends DurableObject<Env> {
       runtimeRandom,
     );
     this.room.phase = "playing";
-    this.room.turnDeadline = Date.now() + TURN_DURATION_MS;
-    this.room.actionBlockedUntil = null;
+    const now = Date.now();
+    const initialDealDuration = initialDealDurationMs(
+      this.room.game.players.reduce((sum, player) => sum + player.hand.length, 0),
+    );
+    this.room.actionBlockedUntil = now + initialDealDuration;
+    this.room.turnDeadline = now + initialDealDuration + TURN_DURATION_MS;
     this.scheduleBotIfNeeded();
     await this.persistAndBroadcast([]);
   }

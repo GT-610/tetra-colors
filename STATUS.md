@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Post-delivery interaction refinement — Review follow-up verified locally
+Post-delivery interaction refinement — Animated game flow verified locally
 
 ## Completed
 
@@ -178,11 +178,23 @@ Post-delivery interaction refinement — Review follow-up verified locally
   snapshot, and scrolls only after the updated hand renders. A local browser check kept the old
   seven-card hand during the animation and rendered the eighth card only after completion; all 56
   tests continue to pass.
+- Added a shared opening-deal window that freezes authoritative player actions, delays the turn
+  deadline and bot scheduler, and animates the initial seven cards around the table in dealing
+  order. Each local card now lands on its own final hand slot before the authoritative hand renders.
+- Replaced full-width hand rows with an adaptive original overlap layout that retains a usable edge
+  for every card, falls back to horizontal overflow for very large hands, and exposes a thin mouse-
+  draggable scrollbar without removing touch swiping. The same layout calculation drives deal
+  animation targets.
+- Kept played-card flights visible over the previous discard until the next snapshot commits, added
+  a current-color transition, and highlighted the full turn banner when the local player can act.
+  Local browser checks covered the opening deal, exact seven-card landing centers, a 13-card mobile
+  hand, mouse scrollbar dragging, and clean consoles at 390 × 844 and 1280 × 720. Twelve test files
+  now contain 61 passing tests.
 
 ## Remaining
 
-- Push the local review follow-up when requested, then complete external review and merge for pull
-  request #3.
+- Push the local animated game-flow commits when requested; changes merged to `main` will deploy
+  through the repository's automatic Workers build.
 
 ## Known issues
 

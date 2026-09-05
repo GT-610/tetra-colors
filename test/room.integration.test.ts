@@ -3,6 +3,7 @@ import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { RoomSessionResponse, RoomSnapshot, ServerMessage } from "../src/protocol";
+import { initialDealDurationMs } from "../src/transition-timing";
 
 const sockets: WebSocket[] = [];
 let createRequestSequence = 0;
@@ -94,6 +95,7 @@ describe("RoomDO integration", () => {
       (message) => message.type === "snapshot" && message.snapshot.players.length === 3,
     );
 
+    const roundStartedAt = Date.now();
     hostConnection.socket.send(JSON.stringify({ type: "lobby.start" }));
     const hostSnapshot = await snapshotFrom(
       hostConnection.inbox,
@@ -111,6 +113,21 @@ describe("RoomDO integration", () => {
     expect(hostSnapshot.game?.currentPlayerId).toBe(host.playerId);
     expect(guestSnapshot.game?.playableCardIds).toEqual([]);
     expect(guestSnapshot.game?.drawnCardId).toBeNull();
+    expect(hostSnapshot.game?.actionBlockedUntil).toBeGreaterThanOrEqual(
+      roundStartedAt + initialDealDurationMs(21),
+    );
+    expect(
+      (hostSnapshot.game?.turnDeadline ?? 0) - (hostSnapshot.game?.actionBlockedUntil ?? 0),
+    ).toBe(30_000);
+
+    hostConnection.socket.send(JSON.stringify({ type: "game.draw-card" }));
+    const openingBlock = await hostConnection.inbox.waitFor(
+      (message) =>
+        message.type === "error" &&
+        message.code === "invalid_action" &&
+        message.message === "请等待当前动画结束",
+    );
+    expect(openingBlock).toMatchObject({ type: "error", code: "invalid_action" });
 
     const hostPayload = JSON.stringify(hostSnapshot);
     const guestPayload = JSON.stringify(guestSnapshot);
@@ -140,6 +157,7 @@ describe("RoomDO integration", () => {
 
     connection.socket.send(JSON.stringify({ type: "lobby.start" }));
     await snapshotFrom(connection.inbox, (snapshot) => snapshot.phase === "playing");
+    await expireActionBlock(host.roomCode);
 
     connection.socket.send(JSON.stringify({ type: "game.draw-card" }));
     const afterDraw = await snapshotFrom(
@@ -150,6 +168,7 @@ describe("RoomDO integration", () => {
     );
     let botTurn = afterDraw;
     if (afterDraw.game?.currentPlayerId !== bot.id) {
+      await expireActionBlock(host.roomCode);
       connection.socket.send(JSON.stringify({ type: "game.pass-turn" }));
       botTurn = await snapshotFrom(
         connection.inbox,
@@ -252,6 +271,7 @@ describe("RoomDO integration", () => {
     );
     connection.socket.send(JSON.stringify({ type: "lobby.start" }));
     await snapshotFrom(connection.inbox, (snapshot) => snapshot.phase === "playing");
+    await expireActionBlock(host.roomCode);
 
     connection.socket.send(JSON.stringify({ type: "game.draw-card" }));
     connection.socket.send(JSON.stringify({ type: "game.draw-card" }));
@@ -540,4 +560,13 @@ async function waitForRoomDeletion(stub: DurableObjectStub): Promise<void> {
       (instance) => (instance as unknown as RoomInstanceHarness).room === null,
     ),
   );
+}
+
+async function expireActionBlock(roomCode: string): Promise<void> {
+  const stub = env.ROOMS.getByName(roomCode);
+  await runInDurableObject(stub, (instance) => {
+    const room = (instance as unknown as RoomInstanceHarness).room;
+    if (!room) throw new Error("Room instance was missing");
+    room.actionBlockedUntil = Date.now() - 1;
+  });
 }

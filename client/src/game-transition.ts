@@ -3,10 +3,13 @@ import type { RoomEvent, RoomSnapshot } from "../../src/protocol";
 import {
   buildTransitionTimeline,
   CARD_DEAL_STAGGER_MS,
+  INITIAL_DEAL_STAGGER_MS,
+  initialDealDurationMs,
   type TransitionTimeline,
 } from "../../src/transition-timing";
 
 export interface RoomTransition {
+  kind: "events" | "initial-deal";
   previous: RoomSnapshot;
   next: RoomSnapshot;
   events: RoomEvent[];
@@ -26,6 +29,8 @@ export interface DealtCardStep {
   card: Card | null;
   reveal: boolean;
   startsAt: number;
+  targetIndex: number | null;
+  targetCount: number | null;
 }
 
 export interface SkipStatusStep {
@@ -46,11 +51,26 @@ export function createRoomTransition(
   next: RoomSnapshot,
   events: readonly RoomEvent[],
 ): RoomTransition | null {
+  if (previous.phase !== "playing" && next.phase === "playing" && next.game) {
+    const dealtCardCount = next.players.reduce((sum, player) => sum + player.handCount, 0);
+    return {
+      kind: "initial-deal",
+      previous: emptyPlayingSnapshot(next, dealtCardCount),
+      next,
+      events: [...events],
+      timeline: {
+        durationMs: initialDealDurationMs(dealtCardCount),
+        eventStartsMs: [],
+      },
+    };
+  }
+
   if (previous.phase !== "playing" || !previous.game || events.every((event) => !isVisual(event))) {
     return null;
   }
 
   return {
+    kind: "events",
     previous,
     next,
     events: [...events],
@@ -64,6 +84,10 @@ export function addedHandCards(transition: RoomTransition): Card[] {
 }
 
 export function buildVisualTransitionPlan(transition: RoomTransition): VisualTransitionPlan {
+  if (transition.kind === "initial-deal") {
+    return buildInitialDealPlan(transition);
+  }
+
   const addedCards = addedHandCards(transition);
   let addedCardIndex = 0;
   const playedCards: PlayedCardStep[] = [];
@@ -89,6 +113,8 @@ export function buildVisualTransitionPlan(transition: RoomTransition): VisualTra
           card,
           reveal: reveal && card !== null,
           startsAt: startsAt + cardIndex * CARD_DEAL_STAGGER_MS,
+          targetIndex: card ? transition.next.hand.findIndex((item) => item.id === card.id) : null,
+          targetCount: reveal ? transition.next.hand.length : null,
         });
       }
     } else if (event.type === "player-skipped" || event.type === "player-unskipped") {
@@ -105,6 +131,52 @@ export function buildVisualTransitionPlan(transition: RoomTransition): VisualTra
     playedCards,
     dealtCards,
     skipStatuses,
+  };
+}
+
+function buildInitialDealPlan(transition: RoomTransition): VisualTransitionPlan {
+  const dealtCards: DealtCardStep[] = [];
+  const maxHandCount = Math.max(0, ...transition.next.players.map((player) => player.handCount));
+  let sequence = 0;
+
+  for (let handIndex = 0; handIndex < maxHandCount; handIndex += 1) {
+    for (const player of transition.next.players) {
+      if (handIndex >= player.handCount) continue;
+      const reveal = player.id === transition.next.selfId;
+      const card = reveal ? (transition.next.hand[handIndex] ?? null) : null;
+      dealtCards.push({
+        type: "deal",
+        playerId: player.id,
+        card,
+        reveal: card !== null,
+        startsAt: sequence * INITIAL_DEAL_STAGGER_MS,
+        targetIndex: reveal ? handIndex : null,
+        targetCount: reveal ? transition.next.hand.length : null,
+      });
+      sequence += 1;
+    }
+  }
+
+  return {
+    durationMs: transition.timeline.durationMs,
+    playedCards: [],
+    dealtCards,
+    skipStatuses: [],
+  };
+}
+
+function emptyPlayingSnapshot(next: RoomSnapshot, dealtCardCount: number): RoomSnapshot {
+  if (!next.game) return next;
+  return {
+    ...next,
+    players: next.players.map((player) => ({ ...player, handCount: 0 })),
+    hand: [],
+    game: {
+      ...next.game,
+      drawPileCount: next.game.drawPileCount + dealtCardCount,
+      playableCardIds: [],
+      drawnCardId: null,
+    },
   };
 }
 

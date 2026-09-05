@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { Card, CardColor } from "../../src/logic";
 import type { ClientMessage, RoomEvent, RoomSnapshot } from "../../src/protocol";
@@ -8,7 +8,7 @@ import {
   CARD_REVEAL_ANIMATION_MS,
 } from "../../src/transition-timing";
 import { copy } from "./copy";
-import { arrangeOpponentSeats } from "./game-layout";
+import { arrangeOpponentSeats, calculateHandLayout } from "./game-layout";
 import {
   buildVisualTransitionPlan,
   type RoomTransition,
@@ -43,7 +43,18 @@ interface DealtCardFlight {
   fromY: number;
   toX: number;
   toY: number;
+  toScale: number;
   width: number;
+}
+
+interface HandViewport {
+  width: number;
+  paddingLeft: number;
+  cardWidth: number;
+}
+
+interface HandCardStyle extends CSSProperties {
+  "--hand-card-layer": number;
 }
 
 interface SeatStyle extends CSSProperties {
@@ -71,6 +82,7 @@ interface DealFlightStyle extends CSSProperties {
   "--deal-reveal-duration": string;
   "--deal-to-x": string;
   "--deal-to-y": string;
+  "--deal-to-scale": string;
   "--deal-width": string;
 }
 
@@ -108,18 +120,26 @@ export function GameTable({
   const drawPileRef = useRef<HTMLButtonElement | null>(null);
   const discardRef = useRef<HTMLDivElement | null>(null);
   const handScrollerRef = useRef<HTMLDivElement | null>(null);
-  const handEndRef = useRef<HTMLSpanElement | null>(null);
   const handCardRefs = useRef(new Map<string, HTMLButtonElement>());
   const opponentRefs = useRef(new Map<string, HTMLElement>());
   const pendingCardOriginRef = useRef<DOMRect | null>(null);
   const flightSequenceRef = useRef(0);
   const scrollAfterSelfDealRef = useRef(false);
+  const [handViewport, setHandViewport] = useState<HandViewport>({
+    width: 0,
+    paddingLeft: 0,
+    cardWidth: 76,
+  });
   const game = snapshot.game;
   const transitionPlan = useMemo(
     () => (transition ? buildVisualTransitionPlan(transition) : null),
     [transition],
   );
   const playableCardIds = new Set(game?.playableCardIds ?? []);
+  const handLayout = useMemo(
+    () => calculateHandLayout(handViewport.width, handViewport.cardWidth, snapshot.hand.length),
+    [handViewport, snapshot.hand.length],
+  );
 
   useEffect(() => {
     if (error) setPending(null);
@@ -136,6 +156,25 @@ export function GameTable({
     const scroller = handScrollerRef.current;
     if (scroller) scroller.scrollLeft = scroller.scrollWidth;
   }, [snapshot.hand]);
+
+  useLayoutEffect(() => {
+    const scroller = handScrollerRef.current;
+    if (!scroller) return;
+    const measure = () => {
+      const measured = measureHandViewport(scroller);
+      setHandViewport((current) =>
+        current.width === measured.width &&
+        current.paddingLeft === measured.paddingLeft &&
+        current.cardWidth === measured.cardWidth
+          ? current
+          : measured,
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [snapshot.hand.length]);
 
   useEffect(() => {
     const blockedFor = (game?.actionBlockedUntil ?? 0) - Date.now();
@@ -190,17 +229,24 @@ export function GameTable({
       const nextDealFlights: DealtCardFlight[] = [];
       for (const [index, step] of transitionPlan.dealtCards.entries()) {
         const isSelf = step.playerId === snapshot.selfId;
-        const targetBounds = isSelf
-          ? handEndRef.current?.getBoundingClientRect()
-          : opponentRefs.current.get(step.playerId)?.getBoundingClientRect();
-        if (!targetBounds) continue;
-
-        const handBounds = handScrollerRef.current?.getBoundingClientRect();
-        const targetX =
-          isSelf && handBounds
-            ? Math.min(targetBounds.left - 38, handBounds.right - 42)
-            : centerX(targetBounds);
-        const targetY = isSelf && handBounds ? centerY(handBounds) : centerY(targetBounds);
+        let targetX: number;
+        let targetY: number;
+        let toScale = 0.5;
+        if (isSelf) {
+          const scroller = handScrollerRef.current;
+          if (step.targetIndex === null || step.targetCount === null || !scroller) continue;
+          const viewport = measureHandViewport(scroller);
+          const layout = calculateHandLayout(viewport.width, viewport.cardWidth, step.targetCount);
+          const target = handTargetPoint(scroller, viewport, layout, step.targetIndex);
+          targetX = target.x;
+          targetY = target.y;
+          toScale = viewport.cardWidth / drawBounds.width;
+        } else {
+          const targetBounds = opponentRefs.current.get(step.playerId)?.getBoundingClientRect();
+          if (!targetBounds) continue;
+          targetX = centerX(targetBounds);
+          targetY = centerY(targetBounds);
+        }
         nextDealFlights.push({
           key: `${step.playerId}-${step.startsAt}-${index}`,
           card: step.card,
@@ -211,6 +257,7 @@ export function GameTable({
           fromY: centerY(drawBounds) - stageBounds.top,
           toX: targetX - stageBounds.left,
           toY: targetY - stageBounds.top,
+          toScale,
           width: drawBounds.width,
         });
       }
@@ -234,6 +281,7 @@ export function GameTable({
   const self = snapshot.players.find((player) => player.id === snapshot.selfId);
   const currentPlayer = snapshot.players.find((player) => player.id === game.currentPlayerId);
   const isSelfTurn = game.currentPlayerId === snapshot.selfId;
+  const initialDealActive = transition?.kind === "initial-deal";
   const waitingForConnection = connectionState !== "connected";
   const transitionActive =
     transition !== null || serverBlockActive || game.actionBlockedUntil > Date.now();
@@ -286,11 +334,21 @@ export function GameTable({
         </div>
       </header>
 
-      <section className="turn-status" aria-live="polite">
+      <section
+        className={`turn-status ${isSelfTurn && !initialDealActive ? "self-turn-status" : ""}`}
+        aria-live="polite"
+      >
         <div>
-          <span className={`turn-pulse ${isSelfTurn ? "self-turn" : ""}`} aria-hidden="true" />
+          <span
+            className={`turn-pulse ${isSelfTurn && !initialDealActive ? "self-turn" : ""}`}
+            aria-hidden="true"
+          />
           <strong>
-            {isSelfTurn ? copy.yourTurn : `${currentPlayer?.nickname ?? "玩家"}${copy.theirTurn}`}
+            {initialDealActive
+              ? copy.dealing
+              : isSelfTurn
+                ? copy.yourTurn
+                : `${currentPlayer?.nickname ?? "玩家"}${copy.theirTurn}`}
           </strong>
         </div>
         <TurnTimer deadline={game.turnDeadline} paused={transitionActive} />
@@ -406,27 +464,40 @@ export function GameTable({
         </div>
 
         <div className="hand-scroller" ref={handScrollerRef}>
-          {snapshot.hand.map((card) => {
-            const playable = playableCardIds.has(card.id);
-            const isDrawn = game.drawnCardId === card.id;
-            return (
-              <button
-                className={`hand-card ${playable ? "playable-card" : ""} ${isDrawn ? "drawn-card" : ""} ${playedSelfCardIds.has(card.id) ? "card-origin-hidden" : ""}`}
-                type="button"
-                key={card.id}
-                ref={(element) => {
-                  if (element) handCardRefs.current.set(card.id, element);
-                  else handCardRefs.current.delete(card.id);
-                }}
-                disabled={!isSelfTurn || !playable || actionDisabled}
-                onClick={(event) => playCard(card, event.currentTarget)}
-                aria-label={`打出${cardLabel(card)}`}
-              >
-                <CardFace card={card} />
-              </button>
-            );
-          })}
-          <span className="hand-end-target" ref={handEndRef} aria-hidden="true" />
+          <div
+            className="hand-track"
+            style={{
+              width: `${handLayout.contentWidth}px`,
+              height: `${handLayout.cardWidth / 0.68 + 30}px`,
+            }}
+          >
+            {snapshot.hand.map((card, index) => {
+              const playable = playableCardIds.has(card.id);
+              const isDrawn = game.drawnCardId === card.id;
+              return (
+                <button
+                  className={`hand-card ${playable ? "playable-card" : ""} ${isDrawn ? "drawn-card" : ""} ${playedSelfCardIds.has(card.id) ? "card-origin-hidden" : ""}`}
+                  type="button"
+                  key={card.id}
+                  style={
+                    {
+                      left: `${index * handLayout.step}px`,
+                      "--hand-card-layer": index + 1,
+                    } as HandCardStyle
+                  }
+                  ref={(element) => {
+                    if (element) handCardRefs.current.set(card.id, element);
+                    else handCardRefs.current.delete(card.id);
+                  }}
+                  disabled={!isSelfTurn || !playable || actionDisabled}
+                  onClick={(event) => playCard(card, event.currentTarget)}
+                  aria-label={`打出${cardLabel(card)}`}
+                >
+                  <CardFace card={card} />
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {isSelfTurn && !game.drawnCardId ? (
@@ -494,6 +565,7 @@ function DealtCardFlightView({ flight }: { flight: DealtCardFlight }) {
     "--deal-reveal-duration": `${CARD_REVEAL_ANIMATION_MS}ms`,
     "--deal-to-x": `${flight.toX}px`,
     "--deal-to-y": `${flight.toY}px`,
+    "--deal-to-scale": String(flight.toScale),
     "--deal-width": `${flight.width}px`,
   };
 
@@ -717,6 +789,39 @@ function centerX(bounds: DOMRect): number {
 
 function centerY(bounds: DOMRect): number {
   return bounds.top + bounds.height / 2;
+}
+
+function measureHandViewport(scroller: HTMLElement): HandViewport {
+  const style = window.getComputedStyle(scroller);
+  const paddingLeft = Number.parseFloat(style.paddingLeft) || 0;
+  const paddingRight = Number.parseFloat(style.paddingRight) || 0;
+  const cardWidth = Number.parseFloat(style.getPropertyValue("--hand-card-width")) || 76;
+  return {
+    width: Math.max(0, scroller.clientWidth - paddingLeft - paddingRight),
+    paddingLeft,
+    cardWidth,
+  };
+}
+
+function handTargetPoint(
+  scroller: HTMLElement,
+  viewport: HandViewport,
+  layout: ReturnType<typeof calculateHandLayout>,
+  targetIndex: number,
+): { x: number; y: number } {
+  const bounds = scroller.getBoundingClientRect();
+  const centeredOffset = Math.max(0, (viewport.width - layout.contentWidth) / 2);
+  const finalScrollLeft = Math.max(0, layout.contentWidth - viewport.width);
+  return {
+    x:
+      bounds.left +
+      viewport.paddingLeft +
+      centeredOffset +
+      targetIndex * layout.step +
+      layout.cardWidth / 2 -
+      finalScrollLeft,
+    y: bounds.top + 15 + layout.cardWidth / 0.68 / 2,
+  };
 }
 
 function cardLabel(card: Card): string {

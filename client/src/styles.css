@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+@property --table-accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #2dd4bf;
+}
+
 :root {
   color: #f6f7fb;
   background: #07090f;
@@ -620,6 +626,7 @@ h2 {
       transparent 34rem
     ),
     linear-gradient(155deg, #080b13, #07090f 62%, #0d0b12);
+  transition: --table-accent 360ms ease;
 }
 
 .table-color-coral {
@@ -670,7 +677,19 @@ h2 {
 }
 
 .hand-scroller::-webkit-scrollbar {
-  display: none;
+  height: 8px;
+}
+
+.hand-scroller::-webkit-scrollbar-track {
+  border-radius: 99px;
+  background: rgb(255 255 255 / 6%);
+}
+
+.hand-scroller::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--table-accent) 58%, #64748b);
+  background-clip: padding-box;
 }
 
 .table-stage {
@@ -800,6 +819,18 @@ h2 {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: rgb(17 23 38 / 72%);
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.turn-status.self-turn-status {
+  border-color: color-mix(in srgb, var(--table-accent) 78%, white 12%);
+  background: color-mix(in srgb, var(--table-accent) 9%, #111726);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--table-accent) 28%, transparent),
+    0 0 22px color-mix(in srgb, var(--table-accent) 18%, transparent);
 }
 
 .turn-status > div:first-child {
@@ -1046,7 +1077,7 @@ h2 {
     top: var(--deal-to-y);
     left: var(--deal-to-x);
     opacity: 1;
-    transform: translate(-50%, -50%) scale(0.86) rotate(0deg);
+    transform: translate(-50%, -50%) scale(var(--deal-to-scale)) rotate(0deg);
   }
 }
 
@@ -1081,7 +1112,7 @@ h2 {
   to {
     top: var(--flight-to-y);
     left: var(--flight-to-x);
-    opacity: 0;
+    opacity: 1;
     transform: translate(-50%, -50%) scale(1) rotate(3deg);
   }
 }
@@ -1389,28 +1420,40 @@ h2 {
 }
 
 .hand-scroller {
+  --hand-card-width: 76px;
   display: flex;
-  gap: 7px;
   overflow-x: auto;
-  padding: 15px 4px 13px;
+  overflow-y: hidden;
+  padding: 0 4px 7px;
+  overscroll-behavior-inline: contain;
   scroll-snap-type: x proximity;
-  scrollbar-width: none;
+  scrollbar-color: color-mix(in srgb, var(--table-accent) 58%, #64748b) rgb(255 255 255 / 6%);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  touch-action: pan-x;
 }
 
-.hand-end-target {
-  width: 1px;
-  flex: 0 0 1px;
-  align-self: stretch;
+.hand-track {
+  position: relative;
+  flex: 0 0 auto;
+  margin-inline: auto;
 }
 
 .hand-card {
-  flex: 0 0 auto;
-  scroll-snap-align: center;
+  position: absolute;
+  top: 15px;
+  z-index: var(--hand-card-layer);
+  scroll-snap-align: start;
   border-radius: 14px;
 }
 
 .hand-card .card-face {
-  width: 76px;
+  width: var(--hand-card-width);
+}
+
+.hand-card:hover,
+.hand-card:focus-visible {
+  z-index: 1000;
 }
 
 .hand-card:disabled {
@@ -1692,17 +1735,13 @@ h2 {
     width: 104px;
   }
 
-  .hand-card .card-face {
-    width: 86px;
-  }
-
   .hand-zone {
     margin-inline: -22px;
     padding-inline: 22px;
   }
 
   .hand-scroller {
-    justify-content: center;
+    --hand-card-width: 86px;
   }
 }
 
@@ -1784,8 +1823,8 @@ h2 {
     padding-inline: 36px;
   }
 
-  .hand-card .card-face {
-    width: 92px;
+  .hand-scroller {
+    --hand-card-width: 92px;
   }
 
   .mobile-draw-button {
@@ -1805,6 +1844,11 @@ h2 {
   .field select,
   .opponent-chip,
   .card-face {
+    transition: none;
+  }
+
+  .game-shell,
+  .turn-status {
     transition: none;
   }
 
