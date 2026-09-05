@@ -113,6 +113,7 @@ export function GameTable({
   const opponentRefs = useRef(new Map<string, HTMLElement>());
   const pendingCardOriginRef = useRef<DOMRect | null>(null);
   const flightSequenceRef = useRef(0);
+  const scrollAfterSelfDealRef = useRef(false);
   const game = snapshot.game;
   const transitionPlan = useMemo(
     () => (transition ? buildVisualTransitionPlan(transition) : null),
@@ -128,6 +129,13 @@ export function GameTable({
     setPending(null);
     setWildCard(null);
   }, [snapshot]);
+
+  useEffect(() => {
+    if (!scrollAfterSelfDealRef.current) return;
+    scrollAfterSelfDealRef.current = false;
+    const scroller = handScrollerRef.current;
+    if (scroller) scroller.scrollLeft = scroller.scrollWidth;
+  }, [snapshot.hand]);
 
   useEffect(() => {
     const blockedFor = (game?.actionBlockedUntil ?? 0) - Date.now();
@@ -149,11 +157,6 @@ export function GameTable({
       const stageBounds = stageRef.current?.getBoundingClientRect();
       const discardBounds = discardRef.current?.getBoundingClientRect();
       if (!stageBounds) return;
-
-      if (transitionPlan.dealtCards.some((step) => step.playerId === snapshot.selfId)) {
-        const scroller = handScrollerRef.current;
-        if (scroller) scroller.scrollLeft = scroller.scrollWidth;
-      }
 
       const nextCardFlights: CardFlight[] = [];
       for (const step of transitionPlan.playedCards) {
@@ -214,10 +217,12 @@ export function GameTable({
       setDealtCardFlights(nextDealFlights);
     });
 
-    const completionTimer = window.setTimeout(
-      onTransitionComplete,
-      transitionPlan.durationMs + ANIMATION_SETTLE_MS,
-    );
+    const completionTimer = window.setTimeout(() => {
+      scrollAfterSelfDealRef.current = transitionPlan.dealtCards.some(
+        (step) => step.playerId === snapshot.selfId,
+      );
+      onTransitionComplete();
+    }, transitionPlan.durationMs + ANIMATION_SETTLE_MS);
     return () => {
       window.cancelAnimationFrame(frame);
       window.clearTimeout(completionTimer);

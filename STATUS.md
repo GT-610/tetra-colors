@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Post-delivery interaction refinement — Pull request open
+Post-delivery interaction refinement — Review follow-up verified locally
 
 ## Completed
 
@@ -173,10 +173,16 @@ Post-delivery interaction refinement — Pull request open
   intended behavior. The browser console contained no warnings or errors. The independent local
   WebSocket smoke test also passed in room `V589B` with two connections, three seats, and hidden-hand
   isolation verified.
+- Moved self-deal hand scrolling out of the pre-animation measurement frame. The completed
+  transition now records whether it dealt to the local player, commits the authoritative next
+  snapshot, and scrolls only after the updated hand renders. A local browser check kept the old
+  seven-card hand during the animation and rendered the eighth card only after completion; all 56
+  tests continue to pass.
 
 ## Remaining
 
-- Complete external review and merge for pull request #3.
+- Push the local review follow-up when requested, then complete external review and merge for pull
+  request #3.
 
 ## Known issues
 
