@@ -161,6 +161,10 @@ export function projectedHandCount(
   );
 }
 
+export function isDirectionChangeEvent(event: RoomEvent | null): boolean {
+  return event?.type === "card-played" && event.card.kind === "reverse";
+}
+
 function buildInitialDealPlan(transition: RoomTransition): VisualTransitionPlan {
   const dealtCards: DealtCardStep[] = [];
   const maxHandCount = Math.max(0, ...transition.next.players.map((player) => player.handCount));

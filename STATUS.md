@@ -198,6 +198,11 @@ Post-delivery interaction refinement — Animated game flow verified locally
   seats. A real 390 × 844 Edge run measured a 0-pixel draw target delta, verified the projected hand
   spacing, long-notice containment, full card opacity, brightness distinction, centered skip marker,
   no page overflow, and a clean browser console. Twelve test files now contain 62 passing tests.
+- Stacked the connection state above the leave action in both lobby and game headers to reclaim
+  horizontal space. Direction-change feedback now survives the authoritative transition commit and
+  remains visible for the same room-event lifetime as its three-second notice. A 390 × 844 Edge run
+  verified both header stacks, notice containment, no page overflow, and a clean browser console;
+  the direction-event selector and existing event-expiration behavior remain covered by the tests.
 
 ## Remaining
 

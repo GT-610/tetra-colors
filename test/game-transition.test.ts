@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildVisualTransitionPlan,
   createRoomTransition,
+  isDirectionChangeEvent,
   projectedHandCount,
 } from "../client/src/game-transition";
 import type { Card } from "../src/logic";
@@ -150,6 +151,12 @@ describe("client game transitions", () => {
       direction: -1,
       startsAt: CARD_PLAY_ANIMATION_MS / 3,
     });
+    expect(
+      isDirectionChangeEvent({ type: "card-played", playerId: "self", card: reverseCard }),
+    ).toBe(true);
+    expect(isDirectionChangeEvent({ type: "card-played", playerId: "self", card: oldCard })).toBe(
+      false,
+    );
   });
 });
 

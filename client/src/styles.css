@@ -380,8 +380,9 @@ h2 {
 
 .topbar-actions {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
 }
 
 .connection-badge {
@@ -675,8 +676,16 @@ h2 {
   display: flex;
   grid-column: 3;
   grid-row: 1;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.topbar-actions .text-button,
+.game-top-actions .text-button {
+  padding: 0;
+  font-size: 0.68rem;
+  line-height: 1.2;
 }
 
 .hand-scroller::-webkit-scrollbar {

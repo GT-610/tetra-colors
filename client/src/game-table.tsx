@@ -11,6 +11,7 @@ import { copy } from "./copy";
 import { arrangeOpponentSeats, calculateHandLayout } from "./game-layout";
 import {
   buildVisualTransitionPlan,
+  isDirectionChangeEvent,
   projectedHandCount,
   type RoomTransition,
   type VisualTransitionPlan,
@@ -147,6 +148,7 @@ export function GameTable({
     () => calculateHandLayout(handViewport.width, handViewport.cardWidth, handSlotCount),
     [handViewport, handSlotCount],
   );
+  const directionEventActive = isDirectionChangeEvent(latestEvent);
 
   useEffect(() => {
     if (error) setPending(null);
@@ -300,10 +302,14 @@ export function GameTable({
       .map((step) => step.card.id) ?? [],
   );
   const selfSkip = skipPresentation(snapshot.selfId, game.skippedPlayerId, transitionPlan);
+  const directionEventCommitted =
+    latestEvent?.type === "card-played" && latestEvent.card.id === game.topDiscard.id;
+  const directionNoticeActive =
+    directionEventActive && (Boolean(transitionPlan?.directionChange) || directionEventCommitted);
   const displayedDirection = transitionPlan?.directionChange?.direction ?? game.direction;
-  const directionStyle = transitionPlan?.directionChange
+  const directionStyle = directionNoticeActive
     ? ({
-        "--direction-delay": `${transitionPlan.directionChange.startsAt}ms`,
+        "--direction-delay": `${transitionPlan?.directionChange?.startsAt ?? 0}ms`,
         "--direction-spin": displayedDirection === 1 ? "360deg" : "-360deg",
       } as DirectionStyle)
     : undefined;
@@ -409,11 +415,11 @@ export function GameTable({
 
         <section className="table-center" aria-label="牌桌中央">
           <div
-            className={`direction-label ${transitionPlan?.directionChange ? "direction-changing" : ""}`}
+            className={`direction-label ${directionNoticeActive ? "direction-changing" : ""}`}
             style={directionStyle}
           >
             <span>{displayedDirection === 1 ? "↻" : "↺"}</span>
-            {transitionPlan?.directionChange ? `${copy.directionChanged} · ` : ""}
+            {directionNoticeActive ? `${copy.directionChanged} · ` : ""}
             {displayedDirection === 1 ? copy.directionClockwise : copy.directionCounterClockwise}
           </div>
 
