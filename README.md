@@ -3,7 +3,7 @@
 Tetra Colors is an original, open-source, self-hosted multiplayer browser card game. Match the
 active color or number, use action cards to redirect the round, and empty your hand first.
 
-- Live deployment: <https://tetra-colors.myddz1005.workers.dev>
+- Live deployment: <https://tetra-colors.gt610.dpdns.org>
 - License: [AGPL-3.0](LICENSE)
 - Runtime: Cloudflare Workers, one Durable Object room actor per room, and Hibernation WebSockets
 - Client: React, Vite, Tailwind CSS, and original CSS-only card visuals
