@@ -1545,7 +1545,7 @@ h2 {
 }
 
 .hand-card:disabled .card-face {
-  filter: saturate(0.42);
+  filter: brightness(0.72) saturate(0.82);
 }
 
 .hand-card.playable-card:not(:disabled) .card-face {
