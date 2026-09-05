@@ -43,4 +43,3 @@
 - Add tests with each behavior change. Before commits, run typecheck, lint, tests, and
   `git diff --check`.
 - Use Conventional Commits in English. Do not rewrite pushed history.
-- Update `STATUS.md` after each verified phase.
