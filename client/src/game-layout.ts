@@ -18,6 +18,9 @@ const ARC_DEPTH = 41;
 const ARC_RADIUS_X = 47;
 const HAND_NATURAL_GAP = 7;
 const HAND_MIN_VISIBLE_RATIO = 0.36;
+export const CARD_ASPECT_RATIO = 0.68;
+export const HAND_CARD_TOP_OFFSET = 15;
+export const HAND_TRACK_VERTICAL_PADDING = HAND_CARD_TOP_OFFSET * 2;
 
 export function arrangeOpponentSeats(
   players: readonly PublicPlayer[],

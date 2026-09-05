@@ -261,6 +261,44 @@ describe("RoomDO integration", () => {
     expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
   });
 
+  it("deletes a bot-only lobby when its last disconnected human expires", async () => {
+    const host = await createRoom("大厅过期玩家");
+    const connection = await connect(host);
+    connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "easy" }));
+    await snapshotFrom(
+      connection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
+
+    const stub = env.ROOMS.getByName(host.roomCode);
+    connection.socket.close(1000, "Lobby expiration test disconnect");
+    await waitForPlayerDisconnect(stub, host.playerId);
+    await expireDisconnectedPlayer(stub, host.playerId);
+
+    await waitForRoomDeletion(stub);
+    expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
+  });
+
+  it("deletes a bot-only active game when its last disconnected human expires", async () => {
+    const host = await createRoom("对局过期玩家");
+    const connection = await connect(host);
+    connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "medium" }));
+    await snapshotFrom(
+      connection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
+    connection.socket.send(JSON.stringify({ type: "lobby.start" }));
+    await snapshotFrom(connection.inbox, (snapshot) => snapshot.phase === "playing");
+
+    const stub = env.ROOMS.getByName(host.roomCode);
+    connection.socket.close(1000, "Game expiration test disconnect");
+    await waitForPlayerDisconnect(stub, host.playerId);
+    await expireDisconnectedPlayer(stub, host.playerId);
+
+    await waitForRoomDeletion(stub);
+    expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
+  });
+
   it("rejects player actions while a visual transition is in progress", async () => {
     const host = await createRoom("动画发起者");
     await joinRoom(host.roomCode, "等待玩家");
@@ -287,12 +325,23 @@ describe("RoomDO integration", () => {
 
   it("survives hibernation and completes the disconnect, reconnect, and rematch lifecycle", async () => {
     const host = await createRoom("生命周期测试");
+    const guest = await joinRoom(host.roomCode, "生命周期来宾");
     const connection = await connect(host);
+    const guestConnection = await connect(guest);
+
+    await snapshotFrom(
+      connection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
+    await snapshotFrom(
+      guestConnection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
 
     connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "medium" }));
     await snapshotFrom(
       connection.inbox,
-      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 3,
     );
 
     connection.socket.send(JSON.stringify({ type: "lobby.start" }));
@@ -331,20 +380,20 @@ describe("RoomDO integration", () => {
       if (!room) throw new Error("Room instance was missing before disconnect");
       room.lastActivity = staleActivity;
     });
-    connection.socket.close(1000, "Lifecycle test disconnect");
+    guestConnection.socket.close(1000, "Lifecycle test disconnect");
     await waitForCondition(() =>
       runInDurableObject(stub, (instance) => {
         const room = (instance as unknown as RoomInstanceHarness).room;
         if (!room) throw new Error("Room was deleted before the reconnect grace elapsed");
-        const human = room.players.find((player) => player.id === host.playerId);
+        const human = room.players.find((player) => player.id === guest.playerId);
         return human?.connected === false && room.lastActivity > staleActivity;
       }),
     );
 
     const finishedRoom = await runInDurableObject(stub, async (instance) => {
       const roomInstance = instance as unknown as RoomInstanceHarness;
-      const human = roomInstance.room?.players.find((player) => player.id === host.playerId);
-      if (!human) throw new Error("Host player was missing");
+      const human = roomInstance.room?.players.find((player) => player.id === guest.playerId);
+      if (!human) throw new Error("Guest player was missing");
       human.disconnectedAt = Date.now() - 30_001;
 
       const expiringRoom = roomInstance.room;
@@ -369,7 +418,7 @@ describe("RoomDO integration", () => {
     expect(finishedRoom?.phase).toBe("finished");
     expect(finishedRoom?.game?.winnerId).toBeTruthy();
 
-    const restoredSession = await joinRoom(host.roomCode, "ignored", host.playerToken);
+    const restoredSession = await joinRoom(host.roomCode, "ignored", guest.playerToken);
     const restoredConnection = await connect(restoredSession);
     const finishedSnapshot = await snapshotFrom(
       restoredConnection.inbox,
@@ -377,12 +426,12 @@ describe("RoomDO integration", () => {
     );
     expect(finishedSnapshot.game?.winnerId).toBe(finishedRoom?.game?.winnerId);
 
-    restoredConnection.socket.send(JSON.stringify({ type: "game.rematch" }));
+    connection.socket.send(JSON.stringify({ type: "game.rematch" }));
     const rematch = await snapshotFrom(
       restoredConnection.inbox,
       (snapshot) => snapshot.phase === "playing",
     );
-    expect(rematch.players).toHaveLength(2);
+    expect(rematch.players).toHaveLength(3);
     expect(rematch.hand).toHaveLength(7);
   }, 30_000);
 
@@ -560,6 +609,25 @@ async function waitForRoomDeletion(stub: DurableObjectStub): Promise<void> {
       (instance) => (instance as unknown as RoomInstanceHarness).room === null,
     ),
   );
+}
+
+async function waitForPlayerDisconnect(stub: DurableObjectStub, playerId: string): Promise<void> {
+  await waitForCondition(() =>
+    runInDurableObject(stub, (instance) => {
+      const room = (instance as unknown as RoomInstanceHarness).room;
+      return room?.players.find((player) => player.id === playerId)?.connected === false;
+    }),
+  );
+}
+
+async function expireDisconnectedPlayer(stub: DurableObjectStub, playerId: string): Promise<void> {
+  await runInDurableObject(stub, async (instance) => {
+    const roomInstance = instance as unknown as RoomInstanceHarness;
+    const player = roomInstance.room?.players.find((candidate) => candidate.id === playerId);
+    if (!player) throw new Error("Disconnected player was missing");
+    player.disconnectedAt = Date.now() - 30_001;
+    await roomInstance.alarm();
+  });
 }
 
 async function expireActionBlock(roomCode: string): Promise<void> {

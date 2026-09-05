@@ -217,6 +217,11 @@ Post-delivery interaction refinement — Animated game flow verified locally
   each event receives a complete entrance and exit cycle, and reduced-motion mode suppresses deal,
   reveal, and skip animations alongside the existing effects. Thirteen test files now contain 66
   passing tests.
+- Applied the same last-human cleanup rule to reconnect-grace expiration: bot-only lobbies and active
+  games are destroyed before host reassignment or bot scheduling, while rooms with another
+  human-controlled seat retain their reconnect and rematch lifecycle. Shared card aspect-ratio and
+  hand-track offset constants now keep rendered hand height and deal landing geometry synchronized.
+  Thirteen test files now contain 68 passing tests.
 
 ## Remaining
 

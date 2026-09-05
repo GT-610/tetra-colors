@@ -9,7 +9,13 @@ import {
 } from "../../src/transition-timing";
 import { copy } from "./copy";
 import { directionNoticeKey, oppositeDirection, requiresColorChoice } from "./game-interaction";
-import { arrangeOpponentSeats, calculateHandLayout } from "./game-layout";
+import {
+  arrangeOpponentSeats,
+  CARD_ASPECT_RATIO,
+  calculateHandLayout,
+  HAND_CARD_TOP_OFFSET,
+  HAND_TRACK_VERTICAL_PADDING,
+} from "./game-layout";
 import {
   buildVisualTransitionPlan,
   isDirectionChangeEvent,
@@ -517,7 +523,7 @@ export function GameTable({
             className="hand-track"
             style={{
               width: `${handLayout.contentWidth}px`,
-              height: `${handLayout.cardWidth / 0.68 + 30}px`,
+              height: `${handLayout.cardWidth / CARD_ASPECT_RATIO + HAND_TRACK_VERTICAL_PADDING}px`,
             }}
           >
             {snapshot.hand.map((card, index) => {
@@ -833,7 +839,7 @@ function handTargetPoint(
       targetIndex * layout.step +
       layout.cardWidth / 2 -
       finalScrollLeft,
-    y: bounds.top + 15 + layout.cardWidth / 0.68 / 2,
+    y: bounds.top + HAND_CARD_TOP_OFFSET + layout.cardWidth / CARD_ASPECT_RATIO / 2,
   };
 }
 

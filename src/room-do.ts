@@ -447,10 +447,7 @@ export class RoomDO extends DurableObject<Env> {
     const player = this.room.players.find((candidate) => candidate.id === playerId);
     if (player?.kind !== "human") return;
 
-    const isLastHuman = !this.room.players.some(
-      (candidate) =>
-        candidate.id !== playerId && candidate.kind === "human" && !candidate.controlledByBot,
-    );
+    const isLastHuman = !this.hasHumanControlledSeat(playerId);
     if (isLastHuman) {
       socket.close(1000, "Left room");
       await this.destroyRoom();
@@ -559,11 +556,11 @@ export class RoomDO extends DurableObject<Env> {
       }
     }
 
-    this.reassignHost();
-    if (this.room.players.length === 0) {
+    if (!this.hasHumanControlledSeat()) {
       await this.destroyRoom();
       return;
     }
+    this.reassignHost();
     this.scheduleBotIfNeeded();
   }
 
@@ -750,6 +747,15 @@ export class RoomDO extends DurableObject<Env> {
   private hasConnectedHuman(): boolean {
     return (
       this.room?.players.some((player) => player.kind === "human" && player.connected) ?? false
+    );
+  }
+
+  private hasHumanControlledSeat(excludedPlayerId?: string): boolean {
+    return (
+      this.room?.players.some(
+        (player) =>
+          player.id !== excludedPlayerId && player.kind === "human" && !player.controlledByBot,
+      ) ?? false
     );
   }
 
