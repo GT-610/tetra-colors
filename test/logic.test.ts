@@ -4,7 +4,9 @@ import type { Card, GameState, NumberCard, RandomSource } from "../src/logic";
 import {
   applyGameAction,
   CARD_COLORS,
+  callFinal,
   canPlayCard,
+  catchFinal,
   createDeck,
   getPlayableCards,
   shuffleCards,
@@ -168,6 +170,74 @@ describe("game rules", () => {
       expect(result.state.players[1]?.hand).toHaveLength(3);
       expect(result.state.players[result.state.turnIndex]?.id).toBe("c");
       expect(result.state.pendingPenalty).toBeNull();
+    }
+  });
+
+  it("lets any one-card player call final outside their turn", () => {
+    const state = testState({
+      players: [
+        { id: "a", hand: [numberCard("a-card", "coral", 1), numberCard("keep", "teal", 2)] },
+        { id: "b", hand: [numberCard("last", "azure", 3)] },
+      ],
+    });
+
+    const result = callFinal(state, "b");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.state.turnIndex).toBe(0);
+      expect(result.state.finalCalledPlayerIds).toEqual(["b"]);
+      expect(result.events).toEqual([{ type: "final-called", playerId: "b" }]);
+    }
+  });
+
+  it("lets another player catch an unannounced one-card hand", () => {
+    const state = testState({
+      players: [
+        { id: "a", hand: [numberCard("a-card", "coral", 1)] },
+        { id: "b", hand: [numberCard("b-card", "azure", 2)] },
+        { id: "c", hand: [numberCard("c-card", "amber", 3)] },
+      ],
+      turnIndex: 1,
+      drawPile: [numberCard("draw-1", "teal", 4), numberCard("draw-2", "azure", 5)],
+    });
+
+    const result = catchFinal(state, "c", "a", seededRandom(2));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.state.turnIndex).toBe(1);
+      expect(result.state.turnNumber).toBe(1);
+      expect(result.state.players[0]?.hand).toHaveLength(3);
+      expect(result.events).toEqual([
+        { type: "cards-drawn", playerId: "a", count: 2, cause: "final" },
+        { type: "final-caught", catcherId: "c", playerId: "a" },
+      ]);
+    }
+  });
+
+  it("ignores catches after a final call and clears calls when a hand changes", () => {
+    const lastCard = numberCard("last", "coral", 8);
+    const state = testState({
+      players: [
+        { id: "a", hand: [lastCard] },
+        { id: "b", hand: [numberCard("b-card", "azure", 2)] },
+      ],
+      finalCalledPlayerIds: ["a"],
+    });
+
+    expect(catchFinal(state, "b", "a", seededRandom(2))).toEqual({
+      ok: false,
+      error: "final_not_catchable",
+    });
+
+    const played = applyGameAction(
+      state,
+      "a",
+      { type: "play-card", cardId: lastCard.id },
+      seededRandom(3),
+    );
+    expect(played.ok).toBe(true);
+    if (played.ok) {
+      expect(played.state.finalCalledPlayerIds).toEqual([]);
     }
   });
 
@@ -550,6 +620,7 @@ function testState(overrides: Partial<GameState>): GameState {
     direction: 1,
     drawnCardId: null,
     pendingPenalty: null,
+    finalCalledPlayerIds: [],
     skippedPlayerId: null,
     winnerId: null,
     turnNumber: 1,

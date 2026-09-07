@@ -30,6 +30,7 @@ export interface PublicGameView {
   playableCardIds: string[];
   drawnCardId: string | null;
   pendingPenalty: PendingPenalty | null;
+  finalCalled: boolean;
   skippedPlayerId: string | null;
   winnerId: string | null;
 }
@@ -52,6 +53,8 @@ export type ClientMessage =
   | { type: "game.play-card"; cardId: string; chosenColor?: CardColor }
   | { type: "game.draw-card" }
   | { type: "game.pass-turn" }
+  | { type: "game.call-final" }
+  | { type: "game.catch-final"; playerId: string }
   | { type: "game.rematch" }
   | { type: "room.leave" };
 
@@ -63,8 +66,10 @@ export type RoomEvent =
       type: "cards-drawn";
       playerId: string;
       count: number;
-      cause: "turn" | "penalty";
+      cause: "turn" | "penalty" | "final";
     }
+  | { type: "final-called"; playerId: string }
+  | { type: "final-caught"; catcherId: string; playerId: string }
   | { type: "player-skipped"; playerId: string }
   | { type: "player-unskipped"; playerId: string }
   | { type: "turn-timed-out"; playerId: string };
@@ -102,6 +107,7 @@ export function parseClientMessage(input: unknown): ClientMessage | null {
     case "lobby.start":
     case "game.draw-card":
     case "game.pass-turn":
+    case "game.call-final":
     case "game.rematch":
     case "room.leave":
       return { type: input.type };
@@ -112,6 +118,10 @@ export function parseClientMessage(input: unknown): ClientMessage | null {
     case "lobby.remove-bot":
       return typeof input.playerId === "string" && input.playerId.length > 0
         ? { type: "lobby.remove-bot", playerId: input.playerId }
+        : null;
+    case "game.catch-final":
+      return typeof input.playerId === "string" && input.playerId.length > 0
+        ? { type: "game.catch-final", playerId: input.playerId }
         : null;
     case "game.play-card": {
       if (typeof input.cardId !== "string" || input.cardId.length === 0) {

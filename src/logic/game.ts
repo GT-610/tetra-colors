@@ -55,6 +55,7 @@ export function startGame(
     direction: 1,
     drawnCardId: null,
     pendingPenalty: null,
+    finalCalledPlayerIds: [],
     skippedPlayerId: null,
     winnerId: null,
     turnNumber: 1,
@@ -162,6 +163,60 @@ export function getPlayableCards(state: GameState, playerId: string): Card[] {
   return playable;
 }
 
+export function callFinal(state: GameState, playerId: string): GameResult {
+  if (state.phase === "finished") {
+    return { ok: false, error: "game_finished" };
+  }
+
+  const player = state.players.find((candidate) => candidate.id === playerId);
+  if (player?.hand.length !== 1 || state.finalCalledPlayerIds.includes(playerId)) {
+    return { ok: false, error: "final_not_available" };
+  }
+
+  const nextState = cloneState(state);
+  nextState.finalCalledPlayerIds.push(playerId);
+  return {
+    ok: true,
+    state: nextState,
+    events: [{ type: "final-called", playerId }],
+  };
+}
+
+export function catchFinal(
+  state: GameState,
+  catcherId: string,
+  playerId: string,
+  random: RandomSource,
+): GameResult {
+  if (state.phase === "finished") {
+    return { ok: false, error: "game_finished" };
+  }
+
+  const catcher = state.players.find((candidate) => candidate.id === catcherId);
+  const playerIndex = state.players.findIndex((candidate) => candidate.id === playerId);
+  const player = state.players[playerIndex];
+  if (
+    !catcher ||
+    !player ||
+    catcher.id === player.id ||
+    player.hand.length !== 1 ||
+    state.finalCalledPlayerIds.includes(player.id)
+  ) {
+    return { ok: false, error: "final_not_catchable" };
+  }
+
+  const nextState = cloneState(state);
+  const count = drawCards(nextState, playerIndex, 2, random);
+  return {
+    ok: true,
+    state: nextState,
+    events: [
+      { type: "cards-drawn", playerId, count, cause: "final" },
+      { type: "final-caught", catcherId, playerId },
+    ],
+  };
+}
+
 function advanceIndex(
   currentIndex: number,
   direction: TurnDirection,
@@ -216,6 +271,9 @@ function playCard(
   }
 
   nextPlayer.hand = nextPlayer.hand.filter((candidate) => candidate.id !== card.id);
+  nextState.finalCalledPlayerIds = nextState.finalCalledPlayerIds.filter(
+    (playerId) => playerId !== nextPlayer.id,
+  );
   nextState.discardPile.push(card);
   nextState.currentColor = "color" in card ? card.color : (chosenColor as CardColor);
   nextState.drawnCardId = null;
@@ -406,6 +464,12 @@ function drawCards(
     drawn += 1;
   }
 
+  if (drawn > 0) {
+    state.finalCalledPlayerIds = state.finalCalledPlayerIds.filter(
+      (playerId) => playerId !== player.id,
+    );
+  }
+
   return drawn;
 }
 
@@ -448,6 +512,7 @@ function cloneState(state: GameState): GameState {
     drawPile: [...state.drawPile],
     discardPile: [...state.discardPile],
     pendingPenalty: state.pendingPenalty ? { ...state.pendingPenalty } : null,
+    finalCalledPlayerIds: [...state.finalCalledPlayerIds],
   };
 }
 

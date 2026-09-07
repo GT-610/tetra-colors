@@ -32,6 +32,11 @@ describe("protocol validation", () => {
     expect(parseClientMessage({ type: "lobby.start" })).toEqual({ type: "lobby.start" });
     expect(parseClientMessage({ type: "game.draw-card" })).toEqual({ type: "game.draw-card" });
     expect(parseClientMessage({ type: "game.pass-turn" })).toEqual({ type: "game.pass-turn" });
+    expect(parseClientMessage({ type: "game.call-final" })).toEqual({ type: "game.call-final" });
+    expect(parseClientMessage({ type: "game.catch-final", playerId: "player-2" })).toEqual({
+      type: "game.catch-final",
+      playerId: "player-2",
+    });
     expect(parseClientMessage({ type: "game.rematch" })).toEqual({ type: "game.rematch" });
     expect(parseClientMessage({ type: "room.leave" })).toEqual({ type: "room.leave" });
   });
@@ -41,6 +46,7 @@ describe("protocol validation", () => {
     expect(parseClientMessage({ type: "lobby.add-bot", difficulty: "impossible" })).toBeNull();
     expect(parseClientMessage({ type: "lobby.remove-bot", playerId: "" })).toBeNull();
     expect(parseClientMessage({ type: "game.play-card", cardId: "" })).toBeNull();
+    expect(parseClientMessage({ type: "game.catch-final", playerId: "" })).toBeNull();
     expect(
       parseClientMessage({ type: "game.play-card", cardId: "card-1", chosenColor: "purple" }),
     ).toBeNull();

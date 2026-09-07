@@ -276,6 +276,7 @@ function gameSnapshot(turnNumber: number, hand: Card[]): RoomSnapshot {
       playableCardIds: [],
       drawnCardId: null,
       pendingPenalty: null,
+      finalCalled: false,
       skippedPlayerId: null,
       winnerId: null,
     },

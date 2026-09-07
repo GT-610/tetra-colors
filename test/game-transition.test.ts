@@ -209,6 +209,7 @@ function snapshot(hand: Card[], otherHandCount = 3): RoomSnapshot {
       playableCardIds: [],
       drawnCardId: null,
       pendingPenalty: null,
+      finalCalled: false,
       skippedPlayerId: null,
       winnerId: null,
     },
