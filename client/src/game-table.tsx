@@ -819,7 +819,7 @@ function EventToast({ event, snapshot }: { event: RoomEvent; snapshot: RoomSnaps
   } else if (event.type === "final-caught") {
     const catcherName =
       snapshot.players.find((player) => player.id === event.catcherId)?.nickname ?? "玩家";
-    text = `${catcherName}抓到${playerName}漏喊，${playerName}补两张牌`;
+    text = `${catcherName}抓到${playerName}漏喊，${playerName}补了 ${event.count} 张牌`;
   } else if (event.type === "turn-timed-out") text = `${playerName}回合超时，已自动行动`;
   else if (event.type === "player-reconnected") text = `${playerName}已重新连接`;
   else if (event.type === "player-became-bot") text = `${playerName}已由电脑托管`;

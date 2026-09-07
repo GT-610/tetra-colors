@@ -69,7 +69,7 @@ export type RoomEvent =
       cause: "turn" | "penalty" | "final";
     }
   | { type: "final-called"; playerId: string }
-  | { type: "final-caught"; catcherId: string; playerId: string }
+  | { type: "final-caught"; catcherId: string; playerId: string; count: number }
   | { type: "player-skipped"; playerId: string }
   | { type: "player-unskipped"; playerId: string }
   | { type: "turn-timed-out"; playerId: string };

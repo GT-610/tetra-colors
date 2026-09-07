@@ -207,12 +207,15 @@ export function catchFinal(
 
   const nextState = cloneState(state);
   const count = drawCards(nextState, playerIndex, 2, random);
+  if (nextState.players[playerIndex]?.hand.length === 1) {
+    nextState.finalCalledPlayerIds.push(playerId);
+  }
   return {
     ok: true,
     state: nextState,
     events: [
       { type: "cards-drawn", playerId, count, cause: "final" },
-      { type: "final-caught", catcherId, playerId },
+      { type: "final-caught", catcherId, playerId, count },
     ],
   };
 }

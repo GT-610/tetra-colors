@@ -485,7 +485,6 @@ export class RoomDO extends DurableObject<Env> {
     }
 
     this.room.game = result.state;
-    this.updateTurnSchedule(result.events);
     await this.persistAndBroadcast(toRoomEvents(result.events));
   }
 
@@ -1014,6 +1013,7 @@ function toRoomEvents(events: readonly GameEvent[]): RoomEvent[] {
         type: "final-caught",
         catcherId: event.catcherId,
         playerId: event.playerId,
+        count: event.count,
       });
     } else if (event.type === "player-skipped" || event.type === "player-unskipped") {
       mapped.push({ type: event.type, playerId: event.playerId });

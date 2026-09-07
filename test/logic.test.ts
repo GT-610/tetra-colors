@@ -219,7 +219,7 @@ describe("game rules", () => {
       expect(result.state.players[0]?.hand).toHaveLength(3);
       expect(result.events).toEqual([
         { type: "cards-drawn", playerId: "a", count: 2, cause: "final" },
-        { type: "final-caught", catcherId: "c", playerId: "a" },
+        { type: "final-caught", catcherId: "c", playerId: "a", count: 2 },
       ]);
     }
   });
@@ -249,6 +249,30 @@ describe("game rules", () => {
     if (played.ok) {
       expect(played.state.finalCalledPlayerIds).toEqual([]);
     }
+  });
+
+  it("does not let an empty draw pile expose the same missed call twice", () => {
+    const state = testState({
+      players: [
+        { id: "a", hand: [numberCard("last", "coral", 1)] },
+        { id: "b", hand: [numberCard("other", "azure", 2)] },
+      ],
+      drawPile: [],
+      discardPile: [numberCard("top", "coral", 3)],
+    });
+
+    const caught = catchFinal(state, "b", "a", seededRandom(2));
+    expect(caught.ok).toBe(true);
+    if (!caught.ok) return;
+    expect(caught.events).toEqual([
+      { type: "cards-drawn", playerId: "a", count: 0, cause: "final" },
+      { type: "final-caught", catcherId: "b", playerId: "a", count: 0 },
+    ]);
+    expect(caught.state.finalCalledPlayerIds).toEqual(["a"]);
+    expect(catchFinal(caught.state, "b", "a", seededRandom(3))).toEqual({
+      ok: false,
+      error: "final_not_catchable",
+    });
   });
 
   it("offers a draw-two penalty to a player who can stack", () => {
