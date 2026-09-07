@@ -9,6 +9,7 @@ import {
   catchFinal,
   createDeck,
   getPlayableCards,
+  shouldBotCallFinal,
   shuffleCards,
   startGame,
 } from "../src/logic";
@@ -42,6 +43,15 @@ describe("deck", () => {
       }),
       { numRuns: 100 },
     );
+  });
+});
+
+describe("bot final calls", () => {
+  it("forgets exactly within the configured ten-percent random band", () => {
+    expect(shouldBotCallFinal(() => 0)).toBe(false);
+    expect(shouldBotCallFinal(() => 0.099_999)).toBe(false);
+    expect(shouldBotCallFinal(() => 0.1)).toBe(true);
+    expect(shouldBotCallFinal(() => 0.9)).toBe(true);
   });
 });
 

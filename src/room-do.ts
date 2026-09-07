@@ -8,6 +8,7 @@ import {
   catchFinal,
   chooseBotAction,
   getPlayableCards,
+  shouldBotCallFinal,
   startGame,
 } from "./logic";
 import {
@@ -559,9 +560,23 @@ export class RoomDO extends DurableObject<Env> {
     }
 
     this.room.game = result.state;
+    const gameEvents = [...result.events];
+    const updatedBot = this.room.game.players.find((player) => player.id === gamePlayer.id);
+    if (
+      this.room.game.phase === "playing" &&
+      updatedBot?.hand.length === 1 &&
+      !this.room.game.finalCalledPlayerIds.includes(updatedBot.id) &&
+      shouldBotCallFinal(runtimeRandom)
+    ) {
+      const called = callFinal(this.room.game, updatedBot.id);
+      if (called.ok) {
+        this.room.game = called.state;
+        gameEvents.push(...called.events);
+      }
+    }
     this.syncGamePhase();
-    this.updateTurnSchedule(result.events);
-    return toRoomEvents(result.events);
+    this.updateTurnSchedule(gameEvents);
+    return toRoomEvents(gameEvents);
   }
 
   private runTimedOutTurn(): RoomEvent[] {
