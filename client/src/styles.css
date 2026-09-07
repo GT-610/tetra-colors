@@ -731,6 +731,7 @@ h2 {
     calc(100% - var(--opponent-width) / 2)
   );
   display: flex;
+  pointer-events: auto;
   width: var(--opponent-width);
   min-width: 0;
   align-items: center;
@@ -739,10 +740,19 @@ h2 {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: rgb(15 20 32 / 78%);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
   transition:
     border-color 160ms ease,
     background 160ms ease;
   transform: translate(-50%, -50%);
+}
+
+.opponent-chip:focus-visible {
+  outline: 2px solid #f8fafc;
+  outline-offset: 3px;
 }
 
 .opponent-chip.active-player {
@@ -1541,14 +1551,54 @@ h2 {
   text-align: center;
 }
 
-.pass-button {
+.hand-actions {
   grid-column: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
   justify-self: end;
+}
+
+.pass-button {
   min-height: 38px;
   padding: 0 14px;
   color: #082f49;
   background: var(--azure);
   font-size: 0.72rem;
+}
+
+.final-button {
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid rgb(250 204 21 / 42%);
+  color: #fef9c3;
+  background: rgb(113 63 18 / 72%);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+
+.final-button.final-ready {
+  box-shadow:
+    inset 0 0 0 1px rgb(254 240 138 / 18%),
+    0 0 20px rgb(250 204 21 / 28%);
+  animation: final-ready-pulse 1.1s ease-in-out infinite;
+}
+
+.final-button.final-called:disabled {
+  border-color: rgb(45 212 191 / 36%);
+  color: #99f6e4;
+  background: rgb(19 78 74 / 58%);
+  opacity: 1;
+}
+
+@keyframes final-ready-pulse {
+  50% {
+    box-shadow:
+      inset 0 0 0 1px rgb(254 240 138 / 34%),
+      0 0 28px rgb(250 204 21 / 48%);
+    transform: translateY(-2px);
+  }
 }
 
 .hand-scroller {

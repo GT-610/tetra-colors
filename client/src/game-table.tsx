@@ -131,7 +131,7 @@ export function GameTable({
   onTransitionComplete,
   onLeave,
 }: GameTableProps) {
-  const [pending, setPending] = useState<"draw" | "pass" | "play" | null>(null);
+  const [pending, setPending] = useState<"draw" | "final" | "pass" | "play" | null>(null);
   const [wildCard, setWildCard] = useState<Card | null>(null);
   const [cardFlights, setCardFlights] = useState<CardFlight[]>([]);
   const [dealtCardFlights, setDealtCardFlights] = useState<DealtCardFlight[]>([]);
@@ -416,14 +416,21 @@ export function GameTable({
           {opponentSeats.map(({ player, left, top }, index) => {
             const skip = skipPresentation(player.id, game.skippedPlayerId, transitionPlan);
             return (
-              <article
+              <button
                 className={`opponent-chip ${player.id === game.currentPlayerId ? "active-player" : ""} ${skip.className}`}
+                type="button"
                 key={player.id}
                 ref={(element) => {
                   if (element) opponentRefs.current.set(player.id, element);
                   else opponentRefs.current.delete(player.id);
                 }}
                 style={opponentSeatStyle(left, top, skip.delay)}
+                onClick={() => {
+                  if (!actionDisabled) {
+                    onSend({ type: "game.catch-final", playerId: player.id });
+                  }
+                }}
+                aria-label={`${player.nickname}，${player.handCount} ${copy.cards}，${copy.catchFinal}`}
               >
                 <span
                   className={`opponent-symbol symbol-${COLOR_ORDER[index % COLOR_ORDER.length]}`}
@@ -435,7 +442,7 @@ export function GameTable({
                   </span>
                 </div>
                 {skip.visible ? <SkipBadge /> : null}
-              </article>
+              </button>
             );
           })}
         </section>
@@ -519,21 +526,41 @@ export function GameTable({
           {!wildCard && pendingPenalty && isSelfTurn ? (
             <span className="penalty-hint">{copy.penaltyHint}</span>
           ) : null}
-          {isSelfTurn && game.drawnCardId ? (
-            <button
-              className="button pass-button"
-              type="button"
-              disabled={actionDisabled}
-              onClick={() => {
-                if (onSend({ type: "game.pass-turn" })) {
-                  pendingCardOriginRef.current = null;
-                  setWildCard(null);
-                  setPending("pass");
-                }
-              }}
-            >
-              {pending === "pass" ? copy.passing : copy.passTurn}
-            </button>
+          {snapshot.hand.length === 1 || (isSelfTurn && game.drawnCardId) ? (
+            <div className="hand-actions">
+              {snapshot.hand.length === 1 ? (
+                <button
+                  className={`button final-button ${game.finalCalled ? "final-called" : "final-ready"}`}
+                  type="button"
+                  disabled={game.finalCalled || actionDisabled}
+                  onClick={() => {
+                    if (onSend({ type: "game.call-final" })) {
+                      setWildCard(null);
+                      setPending("final");
+                    }
+                  }}
+                  aria-pressed={game.finalCalled}
+                >
+                  {game.finalCalled ? copy.finalCalled : copy.callFinal}
+                </button>
+              ) : null}
+              {isSelfTurn && game.drawnCardId ? (
+                <button
+                  className="button pass-button"
+                  type="button"
+                  disabled={actionDisabled}
+                  onClick={() => {
+                    if (onSend({ type: "game.pass-turn" })) {
+                      pendingCardOriginRef.current = null;
+                      setWildCard(null);
+                      setPending("pass");
+                    }
+                  }}
+                >
+                  {pending === "pass" ? copy.passing : copy.passTurn}
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
 
@@ -784,7 +811,15 @@ function EventToast({ event, snapshot }: { event: RoomEvent; snapshot: RoomSnaps
     text =
       event.cause === "penalty"
         ? `${playerName}收下了 ${event.count} 张罚牌`
-        : `${playerName}抽了 ${event.count} 张牌`;
+        : event.cause === "final"
+          ? `${playerName}因漏喊补了 ${event.count} 张牌`
+          : `${playerName}抽了 ${event.count} 张牌`;
+  } else if (event.type === "final-called") {
+    text = `${playerName}喊出了 ${copy.callFinal}`;
+  } else if (event.type === "final-caught") {
+    const catcherName =
+      snapshot.players.find((player) => player.id === event.catcherId)?.nickname ?? "玩家";
+    text = `${catcherName}抓到${playerName}漏喊，${playerName}补两张牌`;
   } else if (event.type === "turn-timed-out") text = `${playerName}回合超时，已自动行动`;
   else if (event.type === "player-reconnected") text = `${playerName}已重新连接`;
   else if (event.type === "player-became-bot") text = `${playerName}已由电脑托管`;
