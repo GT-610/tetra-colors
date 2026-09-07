@@ -46,6 +46,7 @@ function human(id: string): PublicPlayer {
     difficulty: null,
     connected: true,
     handCount: 0,
+    finalCalled: false,
   };
 }
 
@@ -57,5 +58,6 @@ function bot(id: string): PublicPlayer {
     difficulty: "medium",
     connected: true,
     handCount: 0,
+    finalCalled: false,
   };
 }

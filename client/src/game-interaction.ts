@@ -1,8 +1,14 @@
 import type { Card, TurnDirection } from "../../src/logic";
-import type { RoomEvent } from "../../src/protocol";
+import type { PublicPlayer, RoomEvent } from "../../src/protocol";
 
 export function requiresColorChoice(card: Card): boolean {
   return card.kind === "wild" || card.kind === "wild-draw-four";
+}
+
+export function canAttemptFinalCatch(
+  player: Pick<PublicPlayer, "handCount" | "finalCalled">,
+): boolean {
+  return player.handCount === 1 && !player.finalCalled;
 }
 
 export function oppositeDirection(direction: TurnDirection): TurnDirection {

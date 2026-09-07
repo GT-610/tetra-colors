@@ -186,6 +186,7 @@ function snapshot(hand: Card[], otherHandCount = 3): RoomSnapshot {
         difficulty: null,
         connected: true,
         handCount: hand.length,
+        finalCalled: false,
       },
       {
         id: "other",
@@ -194,6 +195,7 @@ function snapshot(hand: Card[], otherHandCount = 3): RoomSnapshot {
         difficulty: null,
         connected: true,
         handCount: otherHandCount,
+        finalCalled: false,
       },
     ],
     hand,

@@ -253,6 +253,7 @@ function gameSnapshot(turnNumber: number, hand: Card[]): RoomSnapshot {
         difficulty: null,
         connected: true,
         handCount: hand.length,
+        finalCalled: false,
       },
       {
         id: "other",
@@ -261,6 +262,7 @@ function gameSnapshot(turnNumber: number, hand: Card[]): RoomSnapshot {
         difficulty: null,
         connected: true,
         handCount: 3,
+        finalCalled: false,
       },
     ],
     hand,

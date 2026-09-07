@@ -355,11 +355,26 @@ describe("RoomDO integration", () => {
     );
     const guestSnapshot = await snapshotFrom(
       guestConnection.inbox,
-      (snapshot) => snapshot.players.find((player) => player.id === host.playerId)?.handCount === 1,
+      (snapshot) =>
+        snapshot.players.find((player) => player.id === host.playerId)?.finalCalled === true,
     );
 
     expect(hostSnapshot.hand).toHaveLength(1);
     expect(guestSnapshot.game?.finalCalled).toBe(false);
+    expect(guestSnapshot.players.find((player) => player.id === host.playerId)).toMatchObject({
+      handCount: 1,
+      finalCalled: true,
+    });
+
+    guestConnection.socket.send(
+      JSON.stringify({ type: "game.catch-final", playerId: host.playerId }),
+    );
+    const acknowledged = await snapshotFrom(
+      guestConnection.inbox,
+      (snapshot) =>
+        snapshot.players.find((player) => player.id === host.playerId)?.finalCalled === true,
+    );
+    expect(acknowledged.players.find((player) => player.id === host.playerId)?.handCount).toBe(1);
   });
 
   it("pauses the current turn while a caught player draws two cards", async () => {

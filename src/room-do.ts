@@ -166,7 +166,7 @@ export class RoomDO extends DurableObject<Env> {
       return;
     }
     if (parsed.type === "game.catch-final") {
-      await this.applyFinalCatch(attachment.playerId, parsed.playerId);
+      await this.applyFinalCatch(socket, attachment.playerId, parsed.playerId);
       return;
     }
 
@@ -488,20 +488,31 @@ export class RoomDO extends DurableObject<Env> {
     await this.persistAndBroadcast(toRoomEvents(result.events));
   }
 
-  private async applyFinalCatch(catcherId: string, playerId: string): Promise<void> {
+  private async applyFinalCatch(
+    socket: WebSocket,
+    catcherId: string,
+    playerId: string,
+  ): Promise<void> {
     if (
       this.room?.phase !== "playing" ||
       !this.room.game ||
       (this.room.actionBlockedUntil !== null && this.room.actionBlockedUntil > Date.now())
     ) {
+      if (this.room) this.sendSnapshot(socket, catcherId);
       return;
     }
 
     const catcher = this.room.players.find((candidate) => candidate.id === catcherId);
-    if (!catcher || catcher.controlledByBot) return;
+    if (!catcher || catcher.controlledByBot) {
+      this.sendSnapshot(socket, catcherId);
+      return;
+    }
 
     const result = catchFinal(this.room.game, catcherId, playerId, runtimeRandom);
-    if (!result.ok) return;
+    if (!result.ok) {
+      this.sendSnapshot(socket, catcherId);
+      return;
+    }
 
     this.room.game = result.state;
     this.updateTurnSchedule(result.events);
@@ -873,6 +884,7 @@ export class RoomDO extends DurableObject<Env> {
       difficulty: isBotControlled(player) ? (player.difficulty ?? "medium") : null,
       connected: player.kind === "bot" || player.connected,
       handCount: game?.players.find((gamePlayer) => gamePlayer.id === player.id)?.hand.length ?? 0,
+      finalCalled: game?.finalCalledPlayerIds.includes(player.id) ?? false,
     }));
 
     const currentPlayer = game?.players[game.turnIndex];

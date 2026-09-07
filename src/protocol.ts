@@ -16,6 +16,7 @@ export interface PublicPlayer {
   difficulty: BotDifficulty | null;
   connected: boolean;
   handCount: number;
+  finalCalled: boolean;
 }
 
 export interface PublicGameView {

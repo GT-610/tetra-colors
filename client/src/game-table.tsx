@@ -8,7 +8,12 @@ import {
   CARD_REVEAL_ANIMATION_MS,
 } from "../../src/transition-timing";
 import { copy } from "./copy";
-import { directionNoticeKey, oppositeDirection, requiresColorChoice } from "./game-interaction";
+import {
+  canAttemptFinalCatch,
+  directionNoticeKey,
+  oppositeDirection,
+  requiresColorChoice,
+} from "./game-interaction";
 import {
   arrangeOpponentSeats,
   CARD_ASPECT_RATIO,
@@ -131,7 +136,7 @@ export function GameTable({
   onTransitionComplete,
   onLeave,
 }: GameTableProps) {
-  const [pending, setPending] = useState<"draw" | "final" | "pass" | "play" | null>(null);
+  const [pending, setPending] = useState<"catch" | "draw" | "final" | "pass" | "play" | null>(null);
   const [wildCard, setWildCard] = useState<Card | null>(null);
   const [cardFlights, setCardFlights] = useState<CardFlight[]>([]);
   const [dealtCardFlights, setDealtCardFlights] = useState<DealtCardFlight[]>([]);
@@ -425,9 +430,11 @@ export function GameTable({
                   else opponentRefs.current.delete(player.id);
                 }}
                 style={opponentSeatStyle(left, top, skip.delay)}
+                disabled={player.finalCalled || actionDisabled}
                 onClick={() => {
-                  if (!actionDisabled) {
-                    onSend({ type: "game.catch-final", playerId: player.id });
+                  if (!actionDisabled && canAttemptFinalCatch(player)) {
+                    const sent = onSend({ type: "game.catch-final", playerId: player.id });
+                    if (sent) setPending("catch");
                   }
                 }}
                 aria-label={`${player.nickname}，${player.handCount} ${copy.cards}，${copy.catchFinal}`}
