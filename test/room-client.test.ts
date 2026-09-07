@@ -172,7 +172,7 @@ describe("room client session invalidation", () => {
     sockets[0]?.emit("message", {
       data: JSON.stringify({
         type: "event",
-        event: { type: "cards-drawn", playerId: "self", count: 1 },
+        event: { type: "cards-drawn", playerId: "self", count: 1, cause: "turn" },
       }),
     });
     sockets[0]?.emit("message", {
@@ -204,7 +204,12 @@ describe("room client session invalidation", () => {
     emitServerMessage({ type: "snapshot", snapshot: initial });
     emitServerMessage({
       type: "event",
-      event: { type: "cards-drawn", playerId: session.playerId, count: 1 },
+      event: {
+        type: "cards-drawn",
+        playerId: session.playerId,
+        count: 1,
+        cause: "turn",
+      },
     });
     emitServerMessage({ type: "snapshot", snapshot: first });
     emitServerMessage({
@@ -248,6 +253,7 @@ function gameSnapshot(turnNumber: number, hand: Card[]): RoomSnapshot {
         difficulty: null,
         connected: true,
         handCount: hand.length,
+        finalCalled: false,
       },
       {
         id: "other",
@@ -256,6 +262,7 @@ function gameSnapshot(turnNumber: number, hand: Card[]): RoomSnapshot {
         difficulty: null,
         connected: true,
         handCount: 3,
+        finalCalled: false,
       },
     ],
     hand,
@@ -270,6 +277,8 @@ function gameSnapshot(turnNumber: number, hand: Card[]): RoomSnapshot {
       actionBlockedUntil: Date.now() + 1_000,
       playableCardIds: [],
       drawnCardId: null,
+      pendingPenalty: null,
+      finalCalled: false,
       skippedPlayerId: null,
       winnerId: null,
     },

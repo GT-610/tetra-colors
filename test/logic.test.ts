@@ -4,9 +4,12 @@ import type { Card, GameState, NumberCard, RandomSource } from "../src/logic";
 import {
   applyGameAction,
   CARD_COLORS,
+  callFinal,
   canPlayCard,
+  catchFinal,
   createDeck,
   getPlayableCards,
+  shouldBotCallFinal,
   shuffleCards,
   startGame,
 } from "../src/logic";
@@ -40,6 +43,15 @@ describe("deck", () => {
       }),
       { numRuns: 100 },
     );
+  });
+});
+
+describe("bot final calls", () => {
+  it("forgets exactly within the configured ten-percent random band", () => {
+    expect(shouldBotCallFinal(() => 0)).toBe(false);
+    expect(shouldBotCallFinal(() => 0.099_999)).toBe(false);
+    expect(shouldBotCallFinal(() => 0.1)).toBe(true);
+    expect(shouldBotCallFinal(() => 0.9)).toBe(true);
   });
 });
 
@@ -166,6 +178,262 @@ describe("game rules", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.state.players[1]?.hand).toHaveLength(3);
+      expect(result.state.players[result.state.turnIndex]?.id).toBe("c");
+      expect(result.state.pendingPenalty).toBeNull();
+    }
+  });
+
+  it("lets any one-card player call final outside their turn", () => {
+    const state = testState({
+      players: [
+        { id: "a", hand: [numberCard("a-card", "coral", 1), numberCard("keep", "teal", 2)] },
+        { id: "b", hand: [numberCard("last", "azure", 3)] },
+      ],
+    });
+
+    const result = callFinal(state, "b");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.state.turnIndex).toBe(0);
+      expect(result.state.finalCalledPlayerIds).toEqual(["b"]);
+      expect(result.events).toEqual([{ type: "final-called", playerId: "b" }]);
+    }
+  });
+
+  it("lets another player catch an unannounced one-card hand", () => {
+    const state = testState({
+      players: [
+        { id: "a", hand: [numberCard("a-card", "coral", 1)] },
+        { id: "b", hand: [numberCard("b-card", "azure", 2)] },
+        { id: "c", hand: [numberCard("c-card", "amber", 3)] },
+      ],
+      turnIndex: 1,
+      drawPile: [numberCard("draw-1", "teal", 4), numberCard("draw-2", "azure", 5)],
+    });
+
+    const result = catchFinal(state, "c", "a", seededRandom(2));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.state.turnIndex).toBe(1);
+      expect(result.state.turnNumber).toBe(1);
+      expect(result.state.players[0]?.hand).toHaveLength(3);
+      expect(result.events).toEqual([
+        { type: "cards-drawn", playerId: "a", count: 2, cause: "final" },
+        { type: "final-caught", catcherId: "c", playerId: "a", count: 2 },
+      ]);
+    }
+  });
+
+  it("ignores catches after a final call and clears calls when a hand changes", () => {
+    const lastCard = numberCard("last", "coral", 8);
+    const state = testState({
+      players: [
+        { id: "a", hand: [lastCard] },
+        { id: "b", hand: [numberCard("b-card", "azure", 2)] },
+      ],
+      finalCalledPlayerIds: ["a"],
+    });
+
+    expect(catchFinal(state, "b", "a", seededRandom(2))).toEqual({
+      ok: false,
+      error: "final_not_catchable",
+    });
+
+    const played = applyGameAction(
+      state,
+      "a",
+      { type: "play-card", cardId: lastCard.id },
+      seededRandom(3),
+    );
+    expect(played.ok).toBe(true);
+    if (played.ok) {
+      expect(played.state.finalCalledPlayerIds).toEqual([]);
+    }
+  });
+
+  it("does not let an empty draw pile expose the same missed call twice", () => {
+    const state = testState({
+      players: [
+        { id: "a", hand: [numberCard("last", "coral", 1)] },
+        { id: "b", hand: [numberCard("other", "azure", 2)] },
+      ],
+      drawPile: [],
+      discardPile: [numberCard("top", "coral", 3)],
+    });
+
+    const caught = catchFinal(state, "b", "a", seededRandom(2));
+    expect(caught.ok).toBe(true);
+    if (!caught.ok) return;
+    expect(caught.events).toEqual([
+      { type: "cards-drawn", playerId: "a", count: 0, cause: "final" },
+      { type: "final-caught", catcherId: "b", playerId: "a", count: 0 },
+    ]);
+    expect(caught.state.finalCalledPlayerIds).toEqual(["a"]);
+    expect(catchFinal(caught.state, "b", "a", seededRandom(3))).toEqual({
+      ok: false,
+      error: "final_not_catchable",
+    });
+  });
+
+  it("offers a draw-two penalty to a player who can stack", () => {
+    const firstDrawTwo: Card = { id: "draw-two-a", kind: "draw-two", color: "coral" };
+    const secondDrawTwo: Card = { id: "draw-two-b", kind: "draw-two", color: "teal" };
+    const state = testState({
+      players: [
+        { id: "a", hand: [firstDrawTwo, numberCard("a-keep", "teal", 1)] },
+        { id: "b", hand: [secondDrawTwo, numberCard("b-keep", "azure", 2)] },
+        { id: "c", hand: [numberCard("c-card", "amber", 3)] },
+      ],
+      drawPile: [
+        numberCard("draw-1", "teal", 5),
+        numberCard("draw-2", "azure", 6),
+        numberCard("draw-3", "amber", 7),
+        numberCard("draw-4", "coral", 8),
+      ],
+      discardPile: [numberCard("top", "coral", 3)],
+      currentColor: "coral",
+    });
+
+    const started = applyGameAction(
+      state,
+      "a",
+      { type: "play-card", cardId: firstDrawTwo.id },
+      seededRandom(2),
+    );
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(started.state.pendingPenalty).toEqual({ total: 2, minimum: 2 });
+    expect(started.state.players[started.state.turnIndex]?.id).toBe("b");
+    expect(getPlayableCards(started.state, "b").map((card) => card.id)).toEqual([secondDrawTwo.id]);
+
+    const stacked = applyGameAction(
+      started.state,
+      "b",
+      { type: "play-card", cardId: secondDrawTwo.id },
+      seededRandom(3),
+    );
+    expect(stacked.ok).toBe(true);
+    if (stacked.ok) {
+      expect(stacked.state.pendingPenalty).toBeNull();
+      expect(stacked.state.players[2]?.hand).toHaveLength(5);
+      expect(stacked.state.players[stacked.state.turnIndex]?.id).toBe("a");
+      expect(stacked.events).toContainEqual({
+        type: "cards-drawn",
+        playerId: "c",
+        count: 4,
+        cause: "penalty",
+      });
+    }
+  });
+
+  it("lets a player take the accumulated penalty by drawing", () => {
+    const drawTwo: Card = { id: "draw-two", kind: "draw-two", color: "coral" };
+    const response: Card = { id: "response", kind: "draw-two", color: "teal" };
+    const state = testState({
+      players: [
+        { id: "a", hand: [drawTwo, numberCard("a-keep", "teal", 1)] },
+        { id: "b", hand: [response, numberCard("b-keep", "azure", 2)] },
+        { id: "c", hand: [numberCard("c-card", "amber", 3)] },
+      ],
+      drawPile: [numberCard("draw-1", "teal", 5), numberCard("draw-2", "azure", 6)],
+      discardPile: [numberCard("top", "coral", 3)],
+      currentColor: "coral",
+    });
+
+    const started = applyGameAction(
+      state,
+      "a",
+      { type: "play-card", cardId: drawTwo.id },
+      seededRandom(2),
+    );
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const accepted = applyGameAction(started.state, "b", { type: "draw-card" }, seededRandom(3));
+    expect(accepted.ok).toBe(true);
+    if (accepted.ok) {
+      expect(accepted.state.pendingPenalty).toBeNull();
+      expect(accepted.state.players[1]?.hand).toHaveLength(4);
+      expect(accepted.state.players[accepted.state.turnIndex]?.id).toBe("c");
+      expect(accepted.events[0]).toEqual({
+        type: "cards-drawn",
+        playerId: "b",
+        count: 2,
+        cause: "penalty",
+      });
+    }
+  });
+
+  it("allows draw-four on draw-two but never draw-two on draw-four", () => {
+    const drawTwo: Card = { id: "draw-two", kind: "draw-two", color: "coral" };
+    const drawFour: Card = { id: "draw-four", kind: "wild-draw-four" };
+    const state = testState({
+      players: [
+        { id: "a", hand: [drawTwo, numberCard("a-keep", "teal", 1)] },
+        { id: "b", hand: [drawFour, numberCard("b-keep", "azure", 2)] },
+        {
+          id: "c",
+          hand: [
+            { id: "blocked-two", kind: "draw-two", color: "amber" },
+            numberCard("c-keep", "teal", 3),
+          ],
+        },
+      ],
+      drawPile: Array.from({ length: 6 }, (_, index) =>
+        numberCard(`draw-${index}`, "amber", (index % 4) as 0 | 1 | 2 | 3),
+      ),
+      discardPile: [numberCard("top", "coral", 3)],
+      currentColor: "coral",
+    });
+
+    const started = applyGameAction(
+      state,
+      "a",
+      { type: "play-card", cardId: drawTwo.id },
+      seededRandom(2),
+    );
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(getPlayableCards(started.state, "b").map((card) => card.id)).toEqual([drawFour.id]);
+
+    const raised = applyGameAction(
+      started.state,
+      "b",
+      { type: "play-card", cardId: drawFour.id, chosenColor: "teal" },
+      seededRandom(3),
+    );
+    expect(raised.ok).toBe(true);
+    if (raised.ok) {
+      expect(raised.state.pendingPenalty).toBeNull();
+      expect(raised.state.players[2]?.hand).toHaveLength(8);
+      expect(raised.state.players[raised.state.turnIndex]?.id).toBe("a");
+    }
+  });
+
+  it("keeps the draw-four color restriction while stacking", () => {
+    const drawTwo: Card = { id: "draw-two", kind: "draw-two", color: "coral" };
+    const drawFour: Card = { id: "draw-four", kind: "wild-draw-four" };
+    const state = testState({
+      players: [
+        { id: "a", hand: [drawTwo, numberCard("a-keep", "teal", 1)] },
+        { id: "b", hand: [drawFour, numberCard("matching", "coral", 2)] },
+        { id: "c", hand: [numberCard("c-card", "amber", 3)] },
+      ],
+      drawPile: [numberCard("draw-1", "teal", 5), numberCard("draw-2", "azure", 6)],
+      discardPile: [numberCard("top", "coral", 3)],
+      currentColor: "coral",
+    });
+
+    const result = applyGameAction(
+      state,
+      "a",
+      { type: "play-card", cardId: drawTwo.id },
+      seededRandom(2),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.state.pendingPenalty).toBeNull();
+      expect(result.state.players[1]?.hand).toHaveLength(4);
       expect(result.state.players[result.state.turnIndex]?.id).toBe("c");
     }
   });
@@ -385,6 +653,8 @@ function testState(overrides: Partial<GameState>): GameState {
     turnIndex: 0,
     direction: 1,
     drawnCardId: null,
+    pendingPenalty: null,
+    finalCalledPlayerIds: [],
     skippedPlayerId: null,
     winnerId: null,
     turnNumber: 1,

@@ -37,6 +37,11 @@ export interface GameConfig {
   enforceWildDrawFour: boolean;
 }
 
+export interface PendingPenalty {
+  total: number;
+  minimum: 2 | 4;
+}
+
 export interface GameState {
   phase: "playing" | "finished";
   players: GamePlayer[];
@@ -46,6 +51,8 @@ export interface GameState {
   turnIndex: number;
   direction: TurnDirection;
   drawnCardId: string | null;
+  pendingPenalty: PendingPenalty | null;
+  finalCalledPlayerIds: string[];
   skippedPlayerId: string | null;
   winnerId: string | null;
   turnNumber: number;
@@ -66,11 +73,21 @@ export type GameErrorCode =
   | "color_not_allowed"
   | "already_drew"
   | "must_play_drawn_card"
-  | "draw_required";
+  | "draw_required"
+  | "penalty_draw_required"
+  | "final_not_available"
+  | "final_not_catchable";
 
 export type GameEvent =
   | { type: "card-played"; playerId: string; card: Card }
-  | { type: "cards-drawn"; playerId: string; count: number }
+  | {
+      type: "cards-drawn";
+      playerId: string;
+      count: number;
+      cause: "turn" | "penalty" | "final";
+    }
+  | { type: "final-called"; playerId: string }
+  | { type: "final-caught"; catcherId: string; playerId: string; count: number }
   | { type: "player-skipped"; playerId: string }
   | { type: "player-unskipped"; playerId: string }
   | { type: "turn-started" };

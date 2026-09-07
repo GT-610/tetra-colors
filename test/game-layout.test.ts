@@ -75,5 +75,6 @@ function player(id: string): PublicPlayer {
     difficulty: id === "self" ? null : "medium",
     connected: true,
     handCount: 7,
+    finalCalled: false,
   };
 }

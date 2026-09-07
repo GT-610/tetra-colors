@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canAttemptFinalCatch,
   directionNoticeKey,
   oppositeDirection,
   requiresColorChoice,
@@ -18,6 +19,12 @@ describe("game table interactions", () => {
     ];
 
     expect(cards.map(requiresColorChoice)).toEqual([true, true, false, false]);
+  });
+
+  it("only attempts to catch an undeclared player with one card", () => {
+    expect(canAttemptFinalCatch({ handCount: 1, finalCalled: false })).toBe(true);
+    expect(canAttemptFinalCatch({ handCount: 1, finalCalled: true })).toBe(false);
+    expect(canAttemptFinalCatch({ handCount: 2, finalCalled: false })).toBe(false);
   });
 
   it("predicts the direction shown before the committed snapshot arrives", () => {

@@ -2,6 +2,14 @@ import { getPlayableCards } from "./game";
 import type { BotDifficulty, Card, CardColor, GameAction, GameState, RandomSource } from "./types";
 import { CARD_COLORS } from "./types";
 
+export const BOT_FINAL_FORGET_RATE = 0.1;
+
+export function shouldBotCallFinal(random: RandomSource): boolean {
+  const value = random();
+  const normalized = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : 0;
+  return normalized >= BOT_FINAL_FORGET_RATE;
+}
+
 export function chooseBotAction(
   state: GameState,
   playerId: string,

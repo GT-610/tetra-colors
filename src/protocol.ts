@@ -1,5 +1,5 @@
 import { isCardColor } from "./logic/deck";
-import type { BotDifficulty, Card, CardColor, TurnDirection } from "./logic/types";
+import type { BotDifficulty, Card, CardColor, PendingPenalty, TurnDirection } from "./logic/types";
 
 export const MAX_NICKNAME_LENGTH = 20;
 export const ROOM_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -16,6 +16,7 @@ export interface PublicPlayer {
   difficulty: BotDifficulty | null;
   connected: boolean;
   handCount: number;
+  finalCalled: boolean;
 }
 
 export interface PublicGameView {
@@ -29,6 +30,8 @@ export interface PublicGameView {
   actionBlockedUntil: number;
   playableCardIds: string[];
   drawnCardId: string | null;
+  pendingPenalty: PendingPenalty | null;
+  finalCalled: boolean;
   skippedPlayerId: string | null;
   winnerId: string | null;
 }
@@ -51,6 +54,8 @@ export type ClientMessage =
   | { type: "game.play-card"; cardId: string; chosenColor?: CardColor }
   | { type: "game.draw-card" }
   | { type: "game.pass-turn" }
+  | { type: "game.call-final" }
+  | { type: "game.catch-final"; playerId: string }
   | { type: "game.rematch" }
   | { type: "room.leave" };
 
@@ -58,7 +63,14 @@ export type RoomEvent =
   | { type: "player-reconnected"; playerId: string }
   | { type: "player-became-bot"; playerId: string }
   | { type: "card-played"; playerId: string; card: Card }
-  | { type: "cards-drawn"; playerId: string; count: number }
+  | {
+      type: "cards-drawn";
+      playerId: string;
+      count: number;
+      cause: "turn" | "penalty" | "final";
+    }
+  | { type: "final-called"; playerId: string }
+  | { type: "final-caught"; catcherId: string; playerId: string; count: number }
   | { type: "player-skipped"; playerId: string }
   | { type: "player-unskipped"; playerId: string }
   | { type: "turn-timed-out"; playerId: string };
@@ -96,6 +108,7 @@ export function parseClientMessage(input: unknown): ClientMessage | null {
     case "lobby.start":
     case "game.draw-card":
     case "game.pass-turn":
+    case "game.call-final":
     case "game.rematch":
     case "room.leave":
       return { type: input.type };
@@ -106,6 +119,10 @@ export function parseClientMessage(input: unknown): ClientMessage | null {
     case "lobby.remove-bot":
       return typeof input.playerId === "string" && input.playerId.length > 0
         ? { type: "lobby.remove-bot", playerId: input.playerId }
+        : null;
+    case "game.catch-final":
+      return typeof input.playerId === "string" && input.playerId.length > 0
+        ? { type: "game.catch-final", playerId: input.playerId }
         : null;
     case "game.play-card": {
       if (typeof input.cardId !== "string" || input.cardId.length === 0) {

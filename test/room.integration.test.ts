@@ -2,6 +2,7 @@ import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from "c
 import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, it } from "vitest";
 
+import type { GameState } from "../src/logic";
 import type { RoomSessionResponse, RoomSnapshot, ServerMessage } from "../src/protocol";
 import { initialDealDurationMs } from "../src/transition-timing";
 
@@ -20,7 +21,7 @@ interface StoredRoomHarness {
     controlledByBot: boolean;
     disconnectedAt: number | null;
   }>;
-  game: { winnerId: string | null; turnNumber: number } | null;
+  game: GameState | null;
 }
 
 interface RoomInstanceHarness {
@@ -321,6 +322,96 @@ describe("RoomDO integration", () => {
     );
 
     expect(blocked).toMatchObject({ type: "error", code: "invalid_action" });
+  });
+
+  it("lets a player call final whenever their hand contains one card", async () => {
+    const host = await createRoom("终牌玩家");
+    const guest = await joinRoom(host.roomCode, "观察玩家");
+    const hostConnection = await connect(host);
+    const guestConnection = await connect(guest);
+
+    await snapshotFrom(
+      hostConnection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
+    await snapshotFrom(
+      guestConnection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
+    hostConnection.socket.send(JSON.stringify({ type: "lobby.start" }));
+    await snapshotFrom(hostConnection.inbox, (snapshot) => snapshot.phase === "playing");
+    await setSingleCardHand(host.roomCode, host.playerId, guest.playerId);
+
+    hostConnection.socket.send(JSON.stringify({ type: "game.call-final" }));
+    await hostConnection.inbox.waitFor(
+      (message) =>
+        message.type === "event" &&
+        message.event.type === "final-called" &&
+        message.event.playerId === host.playerId,
+    );
+    const hostSnapshot = await snapshotFrom(
+      hostConnection.inbox,
+      (snapshot) => snapshot.game?.finalCalled === true,
+    );
+    const guestSnapshot = await snapshotFrom(
+      guestConnection.inbox,
+      (snapshot) =>
+        snapshot.players.find((player) => player.id === host.playerId)?.finalCalled === true,
+    );
+
+    expect(hostSnapshot.hand).toHaveLength(1);
+    expect(guestSnapshot.game?.finalCalled).toBe(false);
+    expect(guestSnapshot.players.find((player) => player.id === host.playerId)).toMatchObject({
+      handCount: 1,
+      finalCalled: true,
+    });
+
+    guestConnection.socket.send(
+      JSON.stringify({ type: "game.catch-final", playerId: host.playerId }),
+    );
+    const acknowledged = await snapshotFrom(
+      guestConnection.inbox,
+      (snapshot) =>
+        snapshot.players.find((player) => player.id === host.playerId)?.finalCalled === true,
+    );
+    expect(acknowledged.players.find((player) => player.id === host.playerId)?.handCount).toBe(1);
+  });
+
+  it("pauses the current turn while a caught player draws two cards", async () => {
+    const host = await createRoom("漏喊玩家");
+    const guest = await joinRoom(host.roomCode, "抓漏玩家");
+    const hostConnection = await connect(host);
+    const guestConnection = await connect(guest);
+
+    await snapshotFrom(
+      hostConnection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
+    await snapshotFrom(
+      guestConnection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
+    hostConnection.socket.send(JSON.stringify({ type: "lobby.start" }));
+    await snapshotFrom(hostConnection.inbox, (snapshot) => snapshot.phase === "playing");
+    const currentPlayerId = await setSingleCardHand(host.roomCode, host.playerId, guest.playerId);
+
+    guestConnection.socket.send(
+      JSON.stringify({ type: "game.catch-final", playerId: host.playerId }),
+    );
+    await guestConnection.inbox.waitFor(
+      (message) =>
+        message.type === "event" &&
+        message.event.type === "final-caught" &&
+        message.event.catcherId === guest.playerId &&
+        message.event.playerId === host.playerId,
+    );
+    const caught = await snapshotFrom(
+      guestConnection.inbox,
+      (snapshot) => snapshot.players.find((player) => player.id === host.playerId)?.handCount === 3,
+    );
+
+    expect(caught.game?.currentPlayerId).toBe(currentPlayerId);
+    expect(caught.game?.actionBlockedUntil).toBeGreaterThan(Date.now());
   });
 
   it("survives hibernation and completes the disconnect, reconnect, and rematch lifecycle", async () => {
@@ -636,5 +727,46 @@ async function expireActionBlock(roomCode: string): Promise<void> {
     const room = (instance as unknown as RoomInstanceHarness).room;
     if (!room) throw new Error("Room instance was missing");
     room.actionBlockedUntil = Date.now() - 1;
+  });
+}
+
+async function setSingleCardHand(
+  roomCode: string,
+  singleCardPlayerId: string,
+  otherPlayerId: string,
+): Promise<string> {
+  const stub = env.ROOMS.getByName(roomCode);
+  return runInDurableObject(stub, (instance) => {
+    const room = (instance as unknown as RoomInstanceHarness).room;
+    const game = room?.game;
+    if (!room || !game) throw new Error("Active game was missing");
+
+    const singleCardPlayer = game.players.find((player) => player.id === singleCardPlayerId);
+    const otherPlayer = game.players.find((player) => player.id === otherPlayerId);
+    const topDiscard = game.discardPile.at(-1);
+    if (!singleCardPlayer || !otherPlayer || !topDiscard) {
+      throw new Error("Test players or discard pile were missing");
+    }
+
+    const availableCards = [
+      ...singleCardPlayer.hand,
+      ...otherPlayer.hand,
+      ...game.drawPile,
+      ...game.discardPile.slice(0, -1),
+    ];
+    const singleCard = availableCards.pop();
+    const otherCard = availableCards.pop();
+    if (!singleCard || !otherCard) throw new Error("Test deck did not contain enough cards");
+
+    singleCardPlayer.hand = [singleCard];
+    otherPlayer.hand = [otherCard];
+    game.drawPile = availableCards;
+    game.discardPile = [topDiscard];
+    game.drawnCardId = null;
+    game.pendingPenalty = null;
+    game.finalCalledPlayerIds = [];
+    room.actionBlockedUntil = Date.now() - 1;
+    room.turnDeadline = Date.now() + 30_000;
+    return game.players[game.turnIndex]?.id ?? "";
   });
 }

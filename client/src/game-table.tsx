@@ -8,7 +8,12 @@ import {
   CARD_REVEAL_ANIMATION_MS,
 } from "../../src/transition-timing";
 import { copy } from "./copy";
-import { directionNoticeKey, oppositeDirection, requiresColorChoice } from "./game-interaction";
+import {
+  canAttemptFinalCatch,
+  directionNoticeKey,
+  oppositeDirection,
+  requiresColorChoice,
+} from "./game-interaction";
 import {
   arrangeOpponentSeats,
   CARD_ASPECT_RATIO,
@@ -131,7 +136,7 @@ export function GameTable({
   onTransitionComplete,
   onLeave,
 }: GameTableProps) {
-  const [pending, setPending] = useState<"draw" | "pass" | "play" | null>(null);
+  const [pending, setPending] = useState<"catch" | "draw" | "final" | "pass" | "play" | null>(null);
   const [wildCard, setWildCard] = useState<Card | null>(null);
   const [cardFlights, setCardFlights] = useState<CardFlight[]>([]);
   const [dealtCardFlights, setDealtCardFlights] = useState<DealtCardFlight[]>([]);
@@ -303,6 +308,7 @@ export function GameTable({
   const self = snapshot.players.find((player) => player.id === snapshot.selfId);
   const currentPlayer = snapshot.players.find((player) => player.id === game.currentPlayerId);
   const isSelfTurn = game.currentPlayerId === snapshot.selfId;
+  const pendingPenalty = game.pendingPenalty;
   const initialDealActive = transition?.kind === "initial-deal";
   const waitingForConnection = connectionState !== "connected";
   const transitionActive =
@@ -391,9 +397,13 @@ export function GameTable({
           <strong>
             {initialDealActive
               ? copy.dealing
-              : isSelfTurn
-                ? copy.yourTurn
-                : `${currentPlayer?.nickname ?? "玩家"}${copy.theirTurn}`}
+              : pendingPenalty && isSelfTurn
+                ? `${copy.penaltyYourTurn} +${pendingPenalty.total}`
+                : pendingPenalty
+                  ? `${currentPlayer?.nickname ?? "玩家"}${copy.penaltyTheirTurn} +${pendingPenalty.total}`
+                  : isSelfTurn
+                    ? copy.yourTurn
+                    : `${currentPlayer?.nickname ?? "玩家"}${copy.theirTurn}`}
           </strong>
         </div>
         <TurnTimer deadline={game.turnDeadline} paused={transitionActive} />
@@ -411,14 +421,23 @@ export function GameTable({
           {opponentSeats.map(({ player, left, top }, index) => {
             const skip = skipPresentation(player.id, game.skippedPlayerId, transitionPlan);
             return (
-              <article
+              <button
                 className={`opponent-chip ${player.id === game.currentPlayerId ? "active-player" : ""} ${skip.className}`}
+                type="button"
                 key={player.id}
                 ref={(element) => {
                   if (element) opponentRefs.current.set(player.id, element);
                   else opponentRefs.current.delete(player.id);
                 }}
                 style={opponentSeatStyle(left, top, skip.delay)}
+                disabled={player.finalCalled || actionDisabled}
+                onClick={() => {
+                  if (!actionDisabled && canAttemptFinalCatch(player)) {
+                    const sent = onSend({ type: "game.catch-final", playerId: player.id });
+                    if (sent) setPending("catch");
+                  }
+                }}
+                aria-label={`${player.nickname}，${player.handCount} ${copy.cards}，${copy.catchFinal}`}
               >
                 <span
                   className={`opponent-symbol symbol-${COLOR_ORDER[index % COLOR_ORDER.length]}`}
@@ -430,7 +449,7 @@ export function GameTable({
                   </span>
                 </div>
                 {skip.visible ? <SkipBadge /> : null}
-              </article>
+              </button>
             );
           })}
         </section>
@@ -447,10 +466,12 @@ export function GameTable({
           </div>
 
           <button
-            className="pile-button draw-pile"
+            className={`pile-button draw-pile ${pendingPenalty ? "penalty-pile" : ""}`}
             ref={drawPileRef}
             type="button"
-            disabled={!isSelfTurn || game.drawnCardId !== null || actionDisabled}
+            disabled={
+              !isSelfTurn || (!pendingPenalty && game.drawnCardId !== null) || actionDisabled
+            }
             onClick={() => {
               if (onSend({ type: "game.draw-card" })) {
                 pendingCardOriginRef.current = null;
@@ -458,10 +479,19 @@ export function GameTable({
                 setPending("draw");
               }
             }}
-            aria-label={`${copy.drawCard}，剩余 ${game.drawPileCount} 张`}
+            aria-label={
+              pendingPenalty
+                ? `${copy.takePenalty}，共 ${pendingPenalty.total} 张`
+                : `${copy.drawCard}，剩余 ${game.drawPileCount} 张`
+            }
           >
             <CardBack />
-            <span>{game.drawPileCount}</span>
+            <span className="pile-count">{game.drawPileCount}</span>
+            {pendingPenalty ? (
+              <span className="penalty-pile-label" aria-hidden="true">
+                {copy.takePenalty} +{pendingPenalty.total}
+              </span>
+            ) : null}
           </button>
 
           <div
@@ -500,21 +530,44 @@ export function GameTable({
             </strong>
           </div>
           {wildCard ? <HandColorPicker disabled={actionDisabled} onChoose={playWild} /> : null}
-          {isSelfTurn && game.drawnCardId ? (
-            <button
-              className="button pass-button"
-              type="button"
-              disabled={actionDisabled}
-              onClick={() => {
-                if (onSend({ type: "game.pass-turn" })) {
-                  pendingCardOriginRef.current = null;
-                  setWildCard(null);
-                  setPending("pass");
-                }
-              }}
-            >
-              {pending === "pass" ? copy.passing : copy.passTurn}
-            </button>
+          {!wildCard && pendingPenalty && isSelfTurn ? (
+            <span className="penalty-hint">{copy.penaltyHint}</span>
+          ) : null}
+          {snapshot.hand.length === 1 || (isSelfTurn && game.drawnCardId) ? (
+            <div className="hand-actions">
+              {snapshot.hand.length === 1 ? (
+                <button
+                  className={`button final-button ${game.finalCalled ? "final-called" : "final-ready"}`}
+                  type="button"
+                  disabled={game.finalCalled || actionDisabled}
+                  onClick={() => {
+                    if (onSend({ type: "game.call-final" })) {
+                      setWildCard(null);
+                      setPending("final");
+                    }
+                  }}
+                  aria-pressed={game.finalCalled}
+                >
+                  {game.finalCalled ? copy.finalCalled : copy.callFinal}
+                </button>
+              ) : null}
+              {isSelfTurn && game.drawnCardId ? (
+                <button
+                  className="button pass-button"
+                  type="button"
+                  disabled={actionDisabled}
+                  onClick={() => {
+                    if (onSend({ type: "game.pass-turn" })) {
+                      pendingCardOriginRef.current = null;
+                      setWildCard(null);
+                      setPending("pass");
+                    }
+                  }}
+                >
+                  {pending === "pass" ? copy.passing : copy.passTurn}
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
 
@@ -761,8 +814,20 @@ function EventToast({ event, snapshot }: { event: RoomEvent; snapshot: RoomSnaps
       : "";
   let text: string;
   if (event.type === "card-played") text = `${playerName}打出${cardLabel(event.card)}`;
-  else if (event.type === "cards-drawn") text = `${playerName}抽了 ${event.count} 张牌`;
-  else if (event.type === "turn-timed-out") text = `${playerName}回合超时，已自动行动`;
+  else if (event.type === "cards-drawn") {
+    text =
+      event.cause === "penalty"
+        ? `${playerName}收下了 ${event.count} 张罚牌`
+        : event.cause === "final"
+          ? `${playerName}因漏喊补了 ${event.count} 张牌`
+          : `${playerName}抽了 ${event.count} 张牌`;
+  } else if (event.type === "final-called") {
+    text = `${playerName}喊出了 ${copy.callFinal}`;
+  } else if (event.type === "final-caught") {
+    const catcherName =
+      snapshot.players.find((player) => player.id === event.catcherId)?.nickname ?? "玩家";
+    text = `${catcherName}抓到${playerName}漏喊，${playerName}补了 ${event.count} 张牌`;
+  } else if (event.type === "turn-timed-out") text = `${playerName}回合超时，已自动行动`;
   else if (event.type === "player-reconnected") text = `${playerName}已重新连接`;
   else if (event.type === "player-became-bot") text = `${playerName}已由电脑托管`;
   else if (event.type === "player-skipped") text = `${playerName}${copy.skipped}`;

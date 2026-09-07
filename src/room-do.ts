@@ -2,7 +2,15 @@ import { DurableObject } from "cloudflare:workers";
 
 import type { Env } from "./env";
 import type { BotDifficulty, GameAction, GameEvent, GameState } from "./logic";
-import { applyGameAction, chooseBotAction, getPlayableCards, startGame } from "./logic";
+import {
+  applyGameAction,
+  callFinal,
+  catchFinal,
+  chooseBotAction,
+  getPlayableCards,
+  shouldBotCallFinal,
+  startGame,
+} from "./logic";
 import {
   isPlayerToken,
   normalizeNickname,
@@ -69,7 +77,11 @@ export class RoomDO extends DurableObject<Env> {
       this.room = (await this.ctx.storage.get<RoomData>(ROOM_STORAGE_KEY)) ?? null;
       if (this.room) {
         this.room.actionBlockedUntil ??= null;
-        if (this.room.game) this.room.game.skippedPlayerId ??= null;
+        if (this.room.game) {
+          this.room.game.pendingPenalty ??= null;
+          this.room.game.finalCalledPlayerIds ??= [];
+          this.room.game.skippedPlayerId ??= null;
+        }
       }
       this.reconcileConnections();
     });
@@ -147,6 +159,14 @@ export class RoomDO extends DurableObject<Env> {
     }
     if (parsed.type === "room.leave") {
       await this.leaveRoom(socket, attachment.playerId);
+      return;
+    }
+    if (parsed.type === "game.call-final") {
+      await this.applyFinalCall(socket, attachment.playerId);
+      return;
+    }
+    if (parsed.type === "game.catch-final") {
+      await this.applyFinalCatch(socket, attachment.playerId, parsed.playerId);
       return;
     }
 
@@ -442,6 +462,63 @@ export class RoomDO extends DurableObject<Env> {
     await this.persistAndBroadcast(toRoomEvents(result.events));
   }
 
+  private async applyFinalCall(socket: WebSocket, playerId: string): Promise<void> {
+    if (this.room?.phase !== "playing" || !this.room.game) {
+      this.sendError(socket, "invalid_phase", "对局尚未开始");
+      return;
+    }
+
+    const player = this.room.players.find((candidate) => candidate.id === playerId);
+    if (!player || player.controlledByBot) {
+      this.sendError(socket, "invalid_action", "当前座位由电脑托管");
+      return;
+    }
+    if (this.room.actionBlockedUntil !== null && this.room.actionBlockedUntil > Date.now()) {
+      this.sendError(socket, "invalid_action", "请等待当前动画结束");
+      return;
+    }
+
+    const result = callFinal(this.room.game, playerId);
+    if (!result.ok) {
+      this.sendError(socket, "invalid_action", gameErrorMessage(result.error));
+      return;
+    }
+
+    this.room.game = result.state;
+    await this.persistAndBroadcast(toRoomEvents(result.events));
+  }
+
+  private async applyFinalCatch(
+    socket: WebSocket,
+    catcherId: string,
+    playerId: string,
+  ): Promise<void> {
+    if (
+      this.room?.phase !== "playing" ||
+      !this.room.game ||
+      (this.room.actionBlockedUntil !== null && this.room.actionBlockedUntil > Date.now())
+    ) {
+      if (this.room) this.sendSnapshot(socket, catcherId);
+      return;
+    }
+
+    const catcher = this.room.players.find((candidate) => candidate.id === catcherId);
+    if (!catcher || catcher.controlledByBot) {
+      this.sendSnapshot(socket, catcherId);
+      return;
+    }
+
+    const result = catchFinal(this.room.game, catcherId, playerId, runtimeRandom);
+    if (!result.ok) {
+      this.sendSnapshot(socket, catcherId);
+      return;
+    }
+
+    this.room.game = result.state;
+    this.updateTurnSchedule(result.events);
+    await this.persistAndBroadcast(toRoomEvents(result.events));
+  }
+
   private async leaveRoom(socket: WebSocket, playerId: string): Promise<void> {
     if (!this.room) return;
     const player = this.room.players.find((candidate) => candidate.id === playerId);
@@ -493,9 +570,23 @@ export class RoomDO extends DurableObject<Env> {
     }
 
     this.room.game = result.state;
+    const gameEvents = [...result.events];
+    const updatedBot = this.room.game.players.find((player) => player.id === gamePlayer.id);
+    if (
+      this.room.game.phase === "playing" &&
+      updatedBot?.hand.length === 1 &&
+      !this.room.game.finalCalledPlayerIds.includes(updatedBot.id) &&
+      shouldBotCallFinal(runtimeRandom)
+    ) {
+      const called = callFinal(this.room.game, updatedBot.id);
+      if (called.ok) {
+        this.room.game = called.state;
+        gameEvents.push(...called.events);
+      }
+    }
     this.syncGamePhase();
-    this.updateTurnSchedule(result.events);
-    return toRoomEvents(result.events);
+    this.updateTurnSchedule(gameEvents);
+    return toRoomEvents(gameEvents);
   }
 
   private runTimedOutTurn(): RoomEvent[] {
@@ -793,6 +884,7 @@ export class RoomDO extends DurableObject<Env> {
       difficulty: isBotControlled(player) ? (player.difficulty ?? "medium") : null,
       connected: player.kind === "bot" || player.connected,
       handCount: game?.players.find((gamePlayer) => gamePlayer.id === player.id)?.hand.length ?? 0,
+      finalCalled: game?.finalCalledPlayerIds.includes(player.id) ?? false,
     }));
 
     const currentPlayer = game?.players[game.turnIndex];
@@ -820,6 +912,8 @@ export class RoomDO extends DurableObject<Env> {
                   ? getPlayableCards(game, playerId).map((card) => card.id)
                   : [],
               drawnCardId: currentPlayer.id === playerId ? game.drawnCardId : null,
+              pendingPenalty: game.pendingPenalty,
+              finalCalled: game.finalCalledPlayerIds.includes(playerId),
               skippedPlayerId: game.skippedPlayerId,
               winnerId: game.winnerId,
             }
@@ -918,7 +1012,21 @@ function toRoomEvents(events: readonly GameEvent[]): RoomEvent[] {
         card: event.card,
       });
     } else if (event.type === "cards-drawn") {
-      mapped.push({ type: "cards-drawn", playerId: event.playerId, count: event.count });
+      mapped.push({
+        type: "cards-drawn",
+        playerId: event.playerId,
+        count: event.count,
+        cause: event.cause,
+      });
+    } else if (event.type === "final-called") {
+      mapped.push({ type: "final-called", playerId: event.playerId });
+    } else if (event.type === "final-caught") {
+      mapped.push({
+        type: "final-caught",
+        catcherId: event.catcherId,
+        playerId: event.playerId,
+        count: event.count,
+      });
     } else if (event.type === "player-skipped" || event.type === "player-unskipped") {
       mapped.push({ type: event.type, playerId: event.playerId });
     }
@@ -937,6 +1045,9 @@ function gameErrorMessage(error: string): string {
     already_drew: "本回合已经抽过牌",
     must_play_drawn_card: "抽牌后只能打出刚抽到的牌",
     draw_required: "请先抽牌",
+    penalty_draw_required: "请打出可叠加的罚牌或点击牌堆收下罚牌",
+    final_not_available: "现在不能喊 FINAL",
+    final_not_catchable: "该玩家当前不能被抓漏",
   };
   return messages[error] ?? "操作无效";
 }

@@ -39,6 +39,22 @@ export function validateGameState(state: GameState): string[] {
     }
   }
   if (
+    state.pendingPenalty &&
+    (state.pendingPenalty.total < state.pendingPenalty.minimum ||
+      state.pendingPenalty.total % 2 !== 0)
+  ) {
+    issues.push("pending penalty total is invalid");
+  }
+  if (new Set(state.finalCalledPlayerIds).size !== state.finalCalledPlayerIds.length) {
+    issues.push("final calls contain duplicate players");
+  }
+  for (const playerId of state.finalCalledPlayerIds) {
+    const player = state.players.find((candidate) => candidate.id === playerId);
+    if (player?.hand.length !== 1) {
+      issues.push("final call belongs to a player without one card");
+    }
+  }
+  if (
     state.skippedPlayerId &&
     !state.players.some((player) => player.id === state.skippedPlayerId)
   ) {
