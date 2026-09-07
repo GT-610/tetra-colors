@@ -69,7 +69,10 @@ export class RoomDO extends DurableObject<Env> {
       this.room = (await this.ctx.storage.get<RoomData>(ROOM_STORAGE_KEY)) ?? null;
       if (this.room) {
         this.room.actionBlockedUntil ??= null;
-        if (this.room.game) this.room.game.skippedPlayerId ??= null;
+        if (this.room.game) {
+          this.room.game.pendingPenalty ??= null;
+          this.room.game.skippedPlayerId ??= null;
+        }
       }
       this.reconcileConnections();
     });
@@ -820,6 +823,7 @@ export class RoomDO extends DurableObject<Env> {
                   ? getPlayableCards(game, playerId).map((card) => card.id)
                   : [],
               drawnCardId: currentPlayer.id === playerId ? game.drawnCardId : null,
+              pendingPenalty: game.pendingPenalty,
               skippedPlayerId: game.skippedPlayerId,
               winnerId: game.winnerId,
             }
@@ -918,7 +922,12 @@ function toRoomEvents(events: readonly GameEvent[]): RoomEvent[] {
         card: event.card,
       });
     } else if (event.type === "cards-drawn") {
-      mapped.push({ type: "cards-drawn", playerId: event.playerId, count: event.count });
+      mapped.push({
+        type: "cards-drawn",
+        playerId: event.playerId,
+        count: event.count,
+        cause: event.cause,
+      });
     } else if (event.type === "player-skipped" || event.type === "player-unskipped") {
       mapped.push({ type: event.type, playerId: event.playerId });
     }
@@ -937,6 +946,7 @@ function gameErrorMessage(error: string): string {
     already_drew: "本回合已经抽过牌",
     must_play_drawn_card: "抽牌后只能打出刚抽到的牌",
     draw_required: "请先抽牌",
+    penalty_draw_required: "请打出可叠加的罚牌或点击牌堆收下罚牌",
   };
   return messages[error] ?? "操作无效";
 }

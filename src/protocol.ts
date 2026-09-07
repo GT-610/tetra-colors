@@ -1,5 +1,5 @@
 import { isCardColor } from "./logic/deck";
-import type { BotDifficulty, Card, CardColor, TurnDirection } from "./logic/types";
+import type { BotDifficulty, Card, CardColor, PendingPenalty, TurnDirection } from "./logic/types";
 
 export const MAX_NICKNAME_LENGTH = 20;
 export const ROOM_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -29,6 +29,7 @@ export interface PublicGameView {
   actionBlockedUntil: number;
   playableCardIds: string[];
   drawnCardId: string | null;
+  pendingPenalty: PendingPenalty | null;
   skippedPlayerId: string | null;
   winnerId: string | null;
 }
@@ -58,7 +59,12 @@ export type RoomEvent =
   | { type: "player-reconnected"; playerId: string }
   | { type: "player-became-bot"; playerId: string }
   | { type: "card-played"; playerId: string; card: Card }
-  | { type: "cards-drawn"; playerId: string; count: number }
+  | {
+      type: "cards-drawn";
+      playerId: string;
+      count: number;
+      cause: "turn" | "penalty";
+    }
   | { type: "player-skipped"; playerId: string }
   | { type: "player-unskipped"; playerId: string }
   | { type: "turn-timed-out"; playerId: string };

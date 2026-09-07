@@ -54,6 +54,7 @@ export function startGame(
     turnIndex: 0,
     direction: 1,
     drawnCardId: null,
+    pendingPenalty: null,
     skippedPlayerId: null,
     winnerId: null,
     turnNumber: 1,
@@ -116,12 +117,38 @@ export function canPlayCard(
   return card.kind !== "number" && card.kind === topDiscard.kind;
 }
 
+export function canStackPenalty(
+  card: Card,
+  minimum: 2 | 4,
+  topDiscard: Card,
+  currentColor: CardColor,
+  hand: readonly Card[],
+  config: GameConfig = DEFAULT_GAME_CONFIG,
+): boolean {
+  if (card.kind === "draw-two") {
+    return minimum <= 2;
+  }
+
+  return (
+    card.kind === "wild-draw-four" &&
+    minimum <= 4 &&
+    canPlayCard(card, topDiscard, currentColor, hand, config)
+  );
+}
+
 export function getPlayableCards(state: GameState, playerId: string): Card[] {
   const player = state.players.find((candidate) => candidate.id === playerId);
   const topDiscard = state.discardPile.at(-1);
 
   if (!player || !topDiscard || state.phase !== "playing") {
     return [];
+  }
+
+  if (state.pendingPenalty) {
+    const { minimum } = state.pendingPenalty;
+    return player.hand.filter((card) =>
+      canStackPenalty(card, minimum, topDiscard, state.currentColor, player.hand, state.config),
+    );
   }
 
   const playable = player.hand.filter((card) =>
@@ -160,7 +187,17 @@ function playCard(
   if (state.drawnCardId && card.id !== state.drawnCardId) {
     return { ok: false, error: "must_play_drawn_card" };
   }
-  if (!canPlayCard(card, topDiscard, state.currentColor, currentPlayer.hand, state.config)) {
+  const cardIsPlayable = state.pendingPenalty
+    ? canStackPenalty(
+        card,
+        state.pendingPenalty.minimum,
+        topDiscard,
+        state.currentColor,
+        currentPlayer.hand,
+        state.config,
+      )
+    : canPlayCard(card, topDiscard, state.currentColor, currentPlayer.hand, state.config);
+  if (!cardIsPlayable) {
     return { ok: false, error: "card_not_playable" };
   }
 
@@ -193,24 +230,31 @@ function playCard(
 
   if (card.kind === "draw-two" || card.kind === "wild-draw-four") {
     const penalty = card.kind === "draw-two" ? 2 : 4;
+    nextState.pendingPenalty = {
+      total: (nextState.pendingPenalty?.total ?? 0) + penalty,
+      minimum: penalty,
+    };
     const penalizedIndex = advanceIndex(
       nextState.turnIndex,
       nextState.direction,
       nextState.players.length,
     );
-    const drawn = drawCards(nextState, penalizedIndex, penalty, random);
+    if (nextPlayer.hand.length === 0) {
+      settlePenalty(nextState, penalizedIndex, random, events);
+      return finishGame(nextState, nextPlayer.id, events);
+    }
+
     const penalizedPlayer = nextState.players[penalizedIndex];
     if (!penalizedPlayer) {
       throw new Error("Penalty target disappeared");
     }
-    events.push({
-      type: "cards-drawn",
-      playerId: penalizedPlayer.id,
-      count: drawn,
-    });
-    if (nextPlayer.hand.length === 0) {
-      return finishGame(nextState, nextPlayer.id, events);
+    const canRespond = hasPenaltyResponse(nextState, penalizedPlayer);
+    if (canRespond) {
+      moveTurn(nextState, 1, events);
+      return { ok: true, state: nextState, events };
     }
+
+    settlePenalty(nextState, penalizedIndex, random, events);
     moveTurn(nextState, 2, events);
     return { ok: true, state: nextState, events };
   }
@@ -258,6 +302,13 @@ function drawCard(state: GameState, currentPlayer: GamePlayer, random: RandomSou
   const nextState = cloneState(state);
   const events: GameEvent[] = [];
   clearSkippedPlayer(nextState, events);
+
+  if (nextState.pendingPenalty) {
+    settlePenalty(nextState, nextState.turnIndex, random, events);
+    moveTurn(nextState, 1, events);
+    return { ok: true, state: nextState, events };
+  }
+
   const count = drawCards(nextState, nextState.turnIndex, 1, random);
   const nextPlayer = nextState.players[nextState.turnIndex];
 
@@ -265,7 +316,7 @@ function drawCard(state: GameState, currentPlayer: GamePlayer, random: RandomSou
     throw new Error("Current player disappeared while drawing");
   }
 
-  events.push({ type: "cards-drawn", playerId: currentPlayer.id, count });
+  events.push({ type: "cards-drawn", playerId: currentPlayer.id, count, cause: "turn" });
 
   const drawn = nextPlayer.hand.at(-1);
   const topDiscard = nextState.discardPile.at(-1);
@@ -283,6 +334,9 @@ function drawCard(state: GameState, currentPlayer: GamePlayer, random: RandomSou
 }
 
 function passTurn(state: GameState): GameResult {
+  if (state.pendingPenalty) {
+    return { ok: false, error: "penalty_draw_required" };
+  }
   if (!state.drawnCardId) {
     return { ok: false, error: "draw_required" };
   }
@@ -293,6 +347,37 @@ function passTurn(state: GameState): GameResult {
   nextState.drawnCardId = null;
   moveTurn(nextState, 1, events);
   return { ok: true, state: nextState, events };
+}
+
+function hasPenaltyResponse(state: GameState, player: GamePlayer): boolean {
+  const topDiscard = state.discardPile.at(-1);
+  if (!state.pendingPenalty || !topDiscard) return false;
+  const { minimum } = state.pendingPenalty;
+  return player.hand.some((card) =>
+    canStackPenalty(card, minimum, topDiscard, state.currentColor, player.hand, state.config),
+  );
+}
+
+function settlePenalty(
+  state: GameState,
+  playerIndex: number,
+  random: RandomSource,
+  events: GameEvent[],
+): void {
+  const penalty = state.pendingPenalty;
+  const player = state.players[playerIndex];
+  if (!penalty || !player) {
+    throw new Error("Penalty state is incomplete");
+  }
+
+  const drawn = drawCards(state, playerIndex, penalty.total, random);
+  state.pendingPenalty = null;
+  events.push({
+    type: "cards-drawn",
+    playerId: player.id,
+    count: drawn,
+    cause: "penalty",
+  });
 }
 
 function drawCards(
@@ -362,6 +447,7 @@ function cloneState(state: GameState): GameState {
     players: state.players.map((player) => ({ ...player, hand: [...player.hand] })),
     drawPile: [...state.drawPile],
     discardPile: [...state.discardPile],
+    pendingPenalty: state.pendingPenalty ? { ...state.pendingPenalty } : null,
   };
 }
 

@@ -39,6 +39,13 @@ export function validateGameState(state: GameState): string[] {
     }
   }
   if (
+    state.pendingPenalty &&
+    (state.pendingPenalty.total < state.pendingPenalty.minimum ||
+      state.pendingPenalty.total % 2 !== 0)
+  ) {
+    issues.push("pending penalty total is invalid");
+  }
+  if (
     state.skippedPlayerId &&
     !state.players.some((player) => player.id === state.skippedPlayerId)
   ) {

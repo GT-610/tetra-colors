@@ -24,7 +24,7 @@ describe("client game transitions", () => {
     const transition = createRoomTransition(
       snapshot([oldCard]),
       snapshot([oldCard, firstDraw, secondDraw]),
-      [{ type: "cards-drawn", playerId: "self", count: 2 }],
+      [{ type: "cards-drawn", playerId: "self", count: 2, cause: "turn" }],
     );
     expect(transition).not.toBeNull();
     if (!transition) return;
@@ -55,7 +55,7 @@ describe("client game transitions", () => {
 
   it("keeps opponent draws face-down and sequences every card", () => {
     const transition = createRoomTransition(snapshot([oldCard]), snapshot([oldCard]), [
-      { type: "cards-drawn", playerId: "other", count: 4 },
+      { type: "cards-drawn", playerId: "other", count: 4, cause: "penalty" },
     ]);
     expect(transition).not.toBeNull();
     if (!transition) return;
@@ -208,6 +208,7 @@ function snapshot(hand: Card[], otherHandCount = 3): RoomSnapshot {
       actionBlockedUntil: 0,
       playableCardIds: [],
       drawnCardId: null,
+      pendingPenalty: null,
       skippedPlayerId: null,
       winnerId: null,
     },
