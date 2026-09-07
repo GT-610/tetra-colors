@@ -1014,7 +1014,7 @@ h2 {
   justify-self: center;
 }
 
-.pile-button > span:last-child {
+.pile-count {
   position: absolute;
   right: -8px;
   bottom: -8px;
@@ -1029,6 +1029,38 @@ h2 {
   background: #e2e8f0;
   font-size: 0.68rem;
   font-weight: 950;
+}
+
+.penalty-pile .card-face {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--coral) 72%, white 8%),
+    0 0 28px rgb(251 113 133 / 42%);
+  animation: penalty-pile-pulse 1.15s ease-in-out infinite;
+}
+
+.penalty-pile-label {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  width: max-content;
+  max-width: 130px;
+  padding: 6px 10px;
+  border: 1px solid rgb(251 113 133 / 48%);
+  border-radius: 99px;
+  color: #fff1f2;
+  background: rgb(76 5 25 / 92%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 32%);
+  font-size: 0.66rem;
+  font-weight: 950;
+  line-height: 1;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+@keyframes penalty-pile-pulse {
+  50% {
+    transform: translateY(-3px) scale(1.025);
+  }
 }
 
 .pile-button:disabled {
@@ -1494,6 +1526,19 @@ h2 {
 
 .hand-heading strong {
   font-size: 0.78rem;
+}
+
+.penalty-hint {
+  grid-column: 2;
+  max-width: 190px;
+  padding: 6px 10px;
+  border: 1px solid rgb(251 113 133 / 34%);
+  border-radius: 99px;
+  color: #fecdd3;
+  background: rgb(76 5 25 / 58%);
+  font-size: 0.66rem;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .pass-button {
