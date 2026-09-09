@@ -160,7 +160,10 @@ export function GameTable({
     () => (transition ? buildVisualTransitionPlan(transition) : null),
     [transition],
   );
-  const playableCardIds = new Set(game?.playableCardIds ?? []);
+  const playableCardIds = useMemo(
+    () => new Set(game?.playableCardIds ?? []),
+    [game?.playableCardIds],
+  );
   const handSlotCount = projectedHandCount(snapshot.hand.length, snapshot.selfId, transitionPlan);
   const handLayout = useMemo(
     () => calculateHandLayout(handViewport.width, handViewport.cardWidth, handSlotCount),
@@ -253,6 +256,11 @@ export function GameTable({
 
       const drawBounds = drawPileRef.current?.getBoundingClientRect();
       if (!drawBounds) return;
+      // Measure the hand viewport once per transition instead of once per
+      // dealt card; every self step in the same transition shares it.
+      const handScroller = handScrollerRef.current;
+      const handViewport = handScroller ? measureHandViewport(handScroller) : null;
+      const handLayouts = new Map<number, ReturnType<typeof calculateHandLayout>>();
       const nextDealFlights: DealtCardFlight[] = [];
       for (const [index, step] of transitionPlan.dealtCards.entries()) {
         const isSelf = step.playerId === snapshot.selfId;
@@ -260,14 +268,26 @@ export function GameTable({
         let targetY: number;
         let toScale = 0.5;
         if (isSelf) {
-          const scroller = handScrollerRef.current;
-          if (step.targetIndex === null || step.targetCount === null || !scroller) continue;
-          const viewport = measureHandViewport(scroller);
-          const layout = calculateHandLayout(viewport.width, viewport.cardWidth, step.targetCount);
-          const target = handTargetPoint(scroller, viewport, layout, step.targetIndex);
+          if (
+            step.targetIndex === null ||
+            step.targetCount === null ||
+            !handScroller ||
+            !handViewport
+          )
+            continue;
+          let layout = handLayouts.get(step.targetCount);
+          if (!layout) {
+            layout = calculateHandLayout(
+              handViewport.width,
+              handViewport.cardWidth,
+              step.targetCount,
+            );
+            handLayouts.set(step.targetCount, layout);
+          }
+          const target = handTargetPoint(handScroller, handViewport, layout, step.targetIndex);
           targetX = target.x;
           targetY = target.y;
-          toScale = viewport.cardWidth / drawBounds.width;
+          toScale = handViewport.cardWidth / drawBounds.width;
         } else {
           const targetBounds = opponentRefs.current.get(step.playerId)?.getBoundingClientRect();
           if (!targetBounds) continue;

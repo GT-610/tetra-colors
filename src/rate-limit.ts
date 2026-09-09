@@ -32,7 +32,13 @@ export class FixedWindowRateLimiter {
           this.buckets.delete(bucketKey);
         }
       }
-      if (this.buckets.size >= this.maxBuckets) return false;
+      // Prefer availability over strictness once every bucket is active: evict
+      // the oldest bucket instead of rejecting new callers outright, so a burst
+      // of distinct keys can no longer lock legitimate users out entirely.
+      if (this.buckets.size >= this.maxBuckets) {
+        const oldest = this.buckets.keys().next();
+        if (!oldest.done) this.buckets.delete(oldest.value);
+      }
     }
 
     this.buckets.set(key, { startedAt: now, count: 1 });

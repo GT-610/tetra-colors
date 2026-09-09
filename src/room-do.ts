@@ -764,6 +764,13 @@ export class RoomDO extends DurableObject<Env> {
     const now = Date.now();
     const bucket = this.rateBuckets.get(playerId);
     if (!bucket || now - bucket.startedAt >= 1_000) {
+      // Seats are bounded, but removed players would otherwise leave stale
+      // buckets behind for the lifetime of the room.
+      for (const [key, candidate] of this.rateBuckets) {
+        if (key === playerId || now - candidate.startedAt >= 1_000) {
+          this.rateBuckets.delete(key);
+        }
+      }
       this.rateBuckets.set(playerId, { startedAt: now, count: 1 });
       return true;
     }

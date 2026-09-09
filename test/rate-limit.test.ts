@@ -12,14 +12,15 @@ describe("fixed window rate limiter", () => {
     expect(limiter.consume("player", 2, 1_000)).toBe(true);
   });
 
-  it("preserves active buckets and rejects new keys when capacity is reached", () => {
+  it("evicts the oldest bucket instead of locking out new keys when full", () => {
     const limiter = new FixedWindowRateLimiter(10_000, 2);
 
     expect(limiter.consume("oldest", 1, 0)).toBe(true);
     expect(limiter.consume("oldest", 1, 1)).toBe(false);
     expect(limiter.consume("second", 1, 2)).toBe(true);
-    expect(limiter.consume("third", 1, 3)).toBe(false);
-    expect(limiter.consume("oldest", 1, 4)).toBe(false);
+    expect(limiter.consume("third", 1, 3)).toBe(true);
+    expect(limiter.consume("oldest", 1, 4)).toBe(true);
+    expect(limiter.consume("third", 1, 5)).toBe(false);
   });
 
   it("removes expired buckets before admitting a new key", () => {
@@ -29,6 +30,10 @@ describe("fixed window rate limiter", () => {
     expect(limiter.consume("active", 1, 500)).toBe(true);
     expect(limiter.consume("new", 1, 1_000)).toBe(true);
     expect(limiter.consume("active", 1, 1_001)).toBe(false);
-    expect(limiter.consume("expired", 1, 1_001)).toBe(false);
+    // Nothing has expired yet, so admitting "expired" evicts the oldest
+    // ("active") instead of rejecting the newcomer outright.
+    expect(limiter.consume("expired", 1, 1_001)).toBe(true);
+    // The evicted key restarts with a fresh bucket.
+    expect(limiter.consume("active", 1, 1_002)).toBe(true);
   });
 });
