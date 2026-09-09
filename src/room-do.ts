@@ -29,6 +29,7 @@ import { buildTransitionTimeline, initialDealDurationMs } from "./transition-tim
 const ROOM_STORAGE_KEY = "room";
 const MAX_MESSAGE_BYTES = 8_192;
 const ACTIONS_PER_SECOND = 15;
+const FRAMES_PER_SECOND = 30;
 const RECONNECT_GRACE_MS = 30_000;
 const IDLE_ROOM_TTL_MS = 15 * 60_000;
 
@@ -68,6 +69,7 @@ export class RoomDO extends DurableObject<Env> {
   private room: RoomData | null = null;
   private readonly ready: Promise<void>;
   private readonly rateBuckets = new Map<string, RateBucket>();
+  private readonly frameBuckets = new Map<string, RateBucket>();
   private fastBotTarget: number | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -116,6 +118,14 @@ export class RoomDO extends DurableObject<Env> {
     const size = typeof message === "string" ? new TextEncoder().encode(message).byteLength : 0;
     if (typeof message !== "string" || size > MAX_MESSAGE_BYTES) {
       this.sendError(socket, "invalid_message", "消息格式无效");
+      return;
+    }
+
+    // Throttle raw inbound frames before parsing so malformed payloads cannot
+    // burn CPU or solicit error replies without bound. Valid actions keep
+    // their own stricter quota below, applied after heartbeat detection.
+    if (!this.consumeFrame(attachment.playerId)) {
+      this.sendError(socket, "rate_limited", "操作过于频繁，请稍后再试");
       return;
     }
 
@@ -761,22 +771,34 @@ export class RoomDO extends DurableObject<Env> {
   }
 
   private consumeAction(playerId: string): boolean {
-    const now = Date.now();
-    const bucket = this.rateBuckets.get(playerId);
+    return this.consumeBucket(this.rateBuckets, playerId, ACTIONS_PER_SECOND, Date.now());
+  }
+
+  private consumeFrame(playerId: string): boolean {
+    return this.consumeBucket(this.frameBuckets, playerId, FRAMES_PER_SECOND, Date.now());
+  }
+
+  private consumeBucket(
+    buckets: Map<string, RateBucket>,
+    playerId: string,
+    limit: number,
+    now: number,
+  ): boolean {
+    const bucket = buckets.get(playerId);
     if (!bucket || now - bucket.startedAt >= 1_000) {
       // Seats are bounded, but removed players would otherwise leave stale
       // buckets behind for the lifetime of the room.
-      for (const [key, candidate] of this.rateBuckets) {
+      for (const [key, candidate] of buckets) {
         if (key === playerId || now - candidate.startedAt >= 1_000) {
-          this.rateBuckets.delete(key);
+          buckets.delete(key);
         }
       }
-      this.rateBuckets.set(playerId, { startedAt: now, count: 1 });
+      buckets.set(playerId, { startedAt: now, count: 1 });
       return true;
     }
 
     bucket.count += 1;
-    return bucket.count <= ACTIONS_PER_SECOND;
+    return bucket.count <= limit;
   }
 
   private async persistAndBroadcast(events: readonly RoomEvent[]): Promise<void> {

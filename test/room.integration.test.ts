@@ -547,6 +547,18 @@ describe("RoomDO integration", () => {
     connection.socket.send(new Uint8Array([1, 2, 3]).buffer);
     await expectServerError(connection.inbox, "invalid_message");
   });
+
+  it("throttles rapid malformed frames before parsing", async () => {
+    const host = await createRoom("畸形限流测试");
+    const connection = await connect(host);
+    await connection.inbox.waitFor((message) => message.type === "snapshot");
+
+    for (let index = 0; index < 40; index += 1) {
+      connection.socket.send("{");
+    }
+
+    await expectServerError(connection.inbox, "rate_limited");
+  });
 });
 
 class MessageInbox {
