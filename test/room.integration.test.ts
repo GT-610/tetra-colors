@@ -230,71 +230,32 @@ describe("RoomDO integration", () => {
     expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
   });
 
-  it("deletes a lobby when its last human leaves bots behind", async () => {
-    const host = await createRoom("单人房主");
+  it.each([
+    ["lobby", "leave"],
+    ["playing", "leave"],
+    ["lobby", "expire"],
+    ["playing", "expire"],
+  ] as const)("deletes a bot-only %s room after its last human %ss", async (phase, exit) => {
+    const host = await createRoom("离场测试");
     const connection = await connect(host);
     connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "easy" }));
     await snapshotFrom(
       connection.inbox,
       (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
     );
-
-    connection.socket.send(JSON.stringify({ type: "room.leave" }));
-    const stub = env.ROOMS.getByName(host.roomCode);
-    await waitForRoomDeletion(stub);
-    expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
-  });
-
-  it("deletes an active mixed room when its only human leaves", async () => {
-    const host = await createRoom("单人玩家");
-    const connection = await connect(host);
-    connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "medium" }));
-    await snapshotFrom(
-      connection.inbox,
-      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
-    );
-    connection.socket.send(JSON.stringify({ type: "lobby.start" }));
-    await snapshotFrom(connection.inbox, (snapshot) => snapshot.phase === "playing");
-
-    connection.socket.send(JSON.stringify({ type: "room.leave" }));
-    const stub = env.ROOMS.getByName(host.roomCode);
-    await waitForRoomDeletion(stub);
-    expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
-  });
-
-  it("deletes a bot-only lobby when its last disconnected human expires", async () => {
-    const host = await createRoom("大厅过期玩家");
-    const connection = await connect(host);
-    connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "easy" }));
-    await snapshotFrom(
-      connection.inbox,
-      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
-    );
+    if (phase === "playing") {
+      connection.socket.send(JSON.stringify({ type: "lobby.start" }));
+      await snapshotFrom(connection.inbox, (snapshot) => snapshot.phase === "playing");
+    }
 
     const stub = env.ROOMS.getByName(host.roomCode);
-    connection.socket.close(1000, "Lobby expiration test disconnect");
-    await waitForPlayerDisconnect(stub, host.playerId);
-    await expireDisconnectedPlayer(stub, host.playerId);
-
-    await waitForRoomDeletion(stub);
-    expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
-  });
-
-  it("deletes a bot-only active game when its last disconnected human expires", async () => {
-    const host = await createRoom("对局过期玩家");
-    const connection = await connect(host);
-    connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "medium" }));
-    await snapshotFrom(
-      connection.inbox,
-      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
-    );
-    connection.socket.send(JSON.stringify({ type: "lobby.start" }));
-    await snapshotFrom(connection.inbox, (snapshot) => snapshot.phase === "playing");
-
-    const stub = env.ROOMS.getByName(host.roomCode);
-    connection.socket.close(1000, "Game expiration test disconnect");
-    await waitForPlayerDisconnect(stub, host.playerId);
-    await expireDisconnectedPlayer(stub, host.playerId);
+    if (exit === "leave") {
+      connection.socket.send(JSON.stringify({ type: "room.leave" }));
+    } else {
+      connection.socket.close(1000, "Expiry test disconnect");
+      await waitForPlayerDisconnect(stub, host.playerId);
+      await expireDisconnectedPlayer(stub, host.playerId);
+    }
 
     await waitForRoomDeletion(stub);
     expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
