@@ -375,6 +375,8 @@ describe("RoomDO integration", () => {
         snapshot.players.find((player) => player.id === host.playerId)?.finalCalled === true,
     );
     expect(acknowledged.players.find((player) => player.id === host.playerId)?.handCount).toBe(1);
+    // Catching a player who already called is rejected with feedback.
+    await expectServerError(guestConnection.inbox, "invalid_action");
   });
 
   it("pauses the current turn while a caught player draws two cards", async () => {
@@ -548,10 +550,26 @@ describe("RoomDO integration", () => {
     await connection.inbox.waitFor((message) => message.type === "snapshot");
 
     for (let index = 0; index < 20; index += 1) {
-      connection.socket.send(JSON.stringify({ type: "heartbeat" }));
+      connection.socket.send(JSON.stringify({ type: "game.draw-card" }));
     }
 
     await expectServerError(connection.inbox, "rate_limited");
+  });
+
+  it("exempts heartbeat keep-alives from the action rate limit", async () => {
+    const host = await createRoom("心跳测试");
+    const connection = await connect(host);
+    await connection.inbox.waitFor((message) => message.type === "snapshot");
+
+    for (let index = 0; index < 20; index += 1) {
+      connection.socket.send(JSON.stringify({ type: "heartbeat" }));
+    }
+    connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "easy" }));
+
+    await snapshotFrom(
+      connection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
   });
 
   it("rejects malformed, oversized, and binary WebSocket messages", async () => {

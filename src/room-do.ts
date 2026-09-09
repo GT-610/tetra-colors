@@ -119,11 +119,6 @@ export class RoomDO extends DurableObject<Env> {
       return;
     }
 
-    if (!this.consumeAction(attachment.playerId)) {
-      this.sendError(socket, "rate_limited", "操作过于频繁，请稍后再试");
-      return;
-    }
-
     let input: unknown;
     try {
       input = JSON.parse(message);
@@ -138,7 +133,15 @@ export class RoomDO extends DurableObject<Env> {
       return;
     }
 
+    // Heartbeats only keep the connection alive and never mutate room state,
+    // so they bypass the action bucket. Otherwise a client playing while its
+    // heartbeat timer fires could be falsely rate limited.
     if (parsed.type === "heartbeat") {
+      return;
+    }
+
+    if (!this.consumeAction(attachment.playerId)) {
+      this.sendError(socket, "rate_limited", "操作过于频繁，请稍后再试");
       return;
     }
 
@@ -492,23 +495,33 @@ export class RoomDO extends DurableObject<Env> {
     catcherId: string,
     playerId: string,
   ): Promise<void> {
-    if (
-      this.room?.phase !== "playing" ||
-      !this.room.game ||
-      (this.room.actionBlockedUntil !== null && this.room.actionBlockedUntil > Date.now())
-    ) {
-      if (this.room) this.sendSnapshot(socket, catcherId);
+    if (this.room?.phase !== "playing" || !this.room.game) {
+      if (this.room) {
+        this.sendError(
+          socket,
+          "invalid_phase",
+          this.room.phase === "finished" ? "本局已经结束" : "对局尚未开始",
+        );
+        this.sendSnapshot(socket, catcherId);
+      }
+      return;
+    }
+    if (this.room.actionBlockedUntil !== null && this.room.actionBlockedUntil > Date.now()) {
+      this.sendError(socket, "invalid_action", "请等待当前动画结束");
+      this.sendSnapshot(socket, catcherId);
       return;
     }
 
     const catcher = this.room.players.find((candidate) => candidate.id === catcherId);
     if (!catcher || catcher.controlledByBot) {
+      this.sendError(socket, "invalid_action", "当前座位由电脑托管");
       this.sendSnapshot(socket, catcherId);
       return;
     }
 
     const result = catchFinal(this.room.game, catcherId, playerId, runtimeRandom);
     if (!result.ok) {
+      this.sendError(socket, "invalid_action", gameErrorMessage(result.error));
       this.sendSnapshot(socket, catcherId);
       return;
     }
@@ -706,7 +719,12 @@ export class RoomDO extends DurableObject<Env> {
     if (events.some((event) => event.type === "turn-started")) {
       this.room.turnDeadline = now + transitionDuration + TURN_DURATION_MS;
     } else if (this.room.turnDeadline !== null) {
-      this.room.turnDeadline += transitionDuration;
+      // Compensate for animation time without letting repeated transitions
+      // push the deadline more than one full turn into the future.
+      this.room.turnDeadline = Math.min(
+        this.room.turnDeadline + transitionDuration,
+        now + transitionDuration + TURN_DURATION_MS,
+      );
     }
     this.scheduleBotIfNeeded();
   }

@@ -692,7 +692,7 @@ function TurnTimer({ deadline, paused }: { deadline: number; paused: boolean }) 
     setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(timer);
-  }, [paused]);
+  }, [paused, deadline]);
 
   const remainingMs = Math.min(TURN_DURATION_MS, Math.max(0, deadline - now));
   return (
