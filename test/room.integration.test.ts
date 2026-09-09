@@ -230,71 +230,32 @@ describe("RoomDO integration", () => {
     expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
   });
 
-  it("deletes a lobby when its last human leaves bots behind", async () => {
-    const host = await createRoom("单人房主");
+  it.each([
+    ["lobby", "leave"],
+    ["playing", "leave"],
+    ["lobby", "expire"],
+    ["playing", "expire"],
+  ] as const)("deletes a bot-only %s room after its last human %ss", async (phase, exit) => {
+    const host = await createRoom("离场测试");
     const connection = await connect(host);
     connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "easy" }));
     await snapshotFrom(
       connection.inbox,
       (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
     );
-
-    connection.socket.send(JSON.stringify({ type: "room.leave" }));
-    const stub = env.ROOMS.getByName(host.roomCode);
-    await waitForRoomDeletion(stub);
-    expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
-  });
-
-  it("deletes an active mixed room when its only human leaves", async () => {
-    const host = await createRoom("单人玩家");
-    const connection = await connect(host);
-    connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "medium" }));
-    await snapshotFrom(
-      connection.inbox,
-      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
-    );
-    connection.socket.send(JSON.stringify({ type: "lobby.start" }));
-    await snapshotFrom(connection.inbox, (snapshot) => snapshot.phase === "playing");
-
-    connection.socket.send(JSON.stringify({ type: "room.leave" }));
-    const stub = env.ROOMS.getByName(host.roomCode);
-    await waitForRoomDeletion(stub);
-    expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
-  });
-
-  it("deletes a bot-only lobby when its last disconnected human expires", async () => {
-    const host = await createRoom("大厅过期玩家");
-    const connection = await connect(host);
-    connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "easy" }));
-    await snapshotFrom(
-      connection.inbox,
-      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
-    );
+    if (phase === "playing") {
+      connection.socket.send(JSON.stringify({ type: "lobby.start" }));
+      await snapshotFrom(connection.inbox, (snapshot) => snapshot.phase === "playing");
+    }
 
     const stub = env.ROOMS.getByName(host.roomCode);
-    connection.socket.close(1000, "Lobby expiration test disconnect");
-    await waitForPlayerDisconnect(stub, host.playerId);
-    await expireDisconnectedPlayer(stub, host.playerId);
-
-    await waitForRoomDeletion(stub);
-    expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
-  });
-
-  it("deletes a bot-only active game when its last disconnected human expires", async () => {
-    const host = await createRoom("对局过期玩家");
-    const connection = await connect(host);
-    connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "medium" }));
-    await snapshotFrom(
-      connection.inbox,
-      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
-    );
-    connection.socket.send(JSON.stringify({ type: "lobby.start" }));
-    await snapshotFrom(connection.inbox, (snapshot) => snapshot.phase === "playing");
-
-    const stub = env.ROOMS.getByName(host.roomCode);
-    connection.socket.close(1000, "Game expiration test disconnect");
-    await waitForPlayerDisconnect(stub, host.playerId);
-    await expireDisconnectedPlayer(stub, host.playerId);
+    if (exit === "leave") {
+      connection.socket.send(JSON.stringify({ type: "room.leave" }));
+    } else {
+      connection.socket.close(1000, "Expiry test disconnect");
+      await waitForPlayerDisconnect(stub, host.playerId);
+      await expireDisconnectedPlayer(stub, host.playerId);
+    }
 
     await waitForRoomDeletion(stub);
     expect((await joinRoomResponse(host.roomCode, "后来者")).status).toBe(404);
@@ -375,6 +336,8 @@ describe("RoomDO integration", () => {
         snapshot.players.find((player) => player.id === host.playerId)?.finalCalled === true,
     );
     expect(acknowledged.players.find((player) => player.id === host.playerId)?.handCount).toBe(1);
+    // Catching a player who already called is rejected with feedback.
+    await expectServerError(guestConnection.inbox, "invalid_action");
   });
 
   it("pauses the current turn while a caught player draws two cards", async () => {
@@ -548,10 +511,26 @@ describe("RoomDO integration", () => {
     await connection.inbox.waitFor((message) => message.type === "snapshot");
 
     for (let index = 0; index < 20; index += 1) {
-      connection.socket.send(JSON.stringify({ type: "heartbeat" }));
+      connection.socket.send(JSON.stringify({ type: "game.draw-card" }));
     }
 
     await expectServerError(connection.inbox, "rate_limited");
+  });
+
+  it("exempts heartbeat keep-alives from the action rate limit", async () => {
+    const host = await createRoom("心跳测试");
+    const connection = await connect(host);
+    await connection.inbox.waitFor((message) => message.type === "snapshot");
+
+    for (let index = 0; index < 20; index += 1) {
+      connection.socket.send(JSON.stringify({ type: "heartbeat" }));
+    }
+    connection.socket.send(JSON.stringify({ type: "lobby.add-bot", difficulty: "easy" }));
+
+    await snapshotFrom(
+      connection.inbox,
+      (snapshot) => snapshot.phase === "lobby" && snapshot.players.length === 2,
+    );
   });
 
   it("rejects malformed, oversized, and binary WebSocket messages", async () => {
@@ -567,6 +546,18 @@ describe("RoomDO integration", () => {
 
     connection.socket.send(new Uint8Array([1, 2, 3]).buffer);
     await expectServerError(connection.inbox, "invalid_message");
+  });
+
+  it("throttles rapid malformed frames before parsing", async () => {
+    const host = await createRoom("畸形限流测试");
+    const connection = await connect(host);
+    await connection.inbox.waitFor((message) => message.type === "snapshot");
+
+    for (let index = 0; index < 40; index += 1) {
+      connection.socket.send("{");
+    }
+
+    await expectServerError(connection.inbox, "rate_limited");
   });
 });
 

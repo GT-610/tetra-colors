@@ -26,5 +26,5 @@
     "exactOptionalPropertyTypes": true,
     "noImplicitOverride": true
   },
-  "include": ["client", "src", "test", "scripts", "*.ts"]
+  "include": ["client", "src", "test", "*.ts"]
 }

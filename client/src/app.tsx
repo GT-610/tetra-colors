@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import type { BotDifficulty, CardColor } from "../../src/logic";
 import {
   MAX_NICKNAME_LENGTH,
+  MAX_PLAYERS,
   normalizeRoomCode,
   type PublicPlayer,
+  ROOM_CODE_LENGTH,
   type RoomSnapshot,
 } from "../../src/protocol";
 import { copy } from "./copy";
@@ -18,7 +20,6 @@ const SHAPE_CLASSES: Record<CardColor, string> = {
   teal: "shape-circle",
   azure: "shape-diamond",
 };
-const EMPTY_SEAT_IDS = ["empty-one", "empty-two", "empty-three", "empty-four", "empty-five"];
 const PLAYER_COLORS = ["teal", "azure", "amber", "coral"] as const satisfies readonly CardColor[];
 
 export function App() {
@@ -125,8 +126,8 @@ function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeS
 
       <section className="panel entry-panel" aria-labelledby="entry-title">
         <div>
-          <p className="section-kicker">无需账号</p>
-          <h2 id="entry-title">进入牌桌</h2>
+          <p className="section-kicker">{copy.noAccount}</p>
+          <h2 id="entry-title">{copy.entryTitle}</h2>
         </div>
 
         <label className="field">
@@ -162,7 +163,7 @@ function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeS
         </button>
 
         <div className="divider">
-          <span>或凭房间码加入</span>
+          <span>{copy.joinByCode}</span>
         </div>
 
         <label className="field">
@@ -171,7 +172,7 @@ function WelcomeScreen({ busy, error, onCreate, onJoin, onClearError }: WelcomeS
             autoCapitalize="characters"
             autoComplete="off"
             className="room-code-input"
-            maxLength={5}
+            maxLength={ROOM_CODE_LENGTH}
             placeholder={copy.roomCodePlaceholder}
             value={roomCode}
             onChange={(event) => {
@@ -227,7 +228,7 @@ function LobbyScreen({ snapshot, connectionState, error, onSend, onLeave }: Lobb
     return () => window.clearTimeout(timer);
   }, [copied]);
 
-  const subtitle = `${snapshot.players.length} / 6 ${copy.seats}`;
+  const subtitle = `${snapshot.players.length} / ${MAX_PLAYERS} ${copy.seats}`;
 
   const copyRoomCode = async () => {
     try {
@@ -268,7 +269,7 @@ function LobbyScreen({ snapshot, connectionState, error, onSend, onLeave }: Lobb
         </div>
       </section>
 
-      <section className="player-grid" aria-label="玩家列表">
+      <section className="player-grid" aria-label={copy.playerList}>
         {snapshot.players.map((player, index) => (
           <PlayerTile
             key={player.id}
@@ -280,8 +281,8 @@ function LobbyScreen({ snapshot, connectionState, error, onSend, onLeave }: Lobb
             onRemove={() => onSend({ type: "lobby.remove-bot", playerId: player.id })}
           />
         ))}
-        {EMPTY_SEAT_IDS.slice(0, 6 - snapshot.players.length).map((seatId) => (
-          <div className="player-tile empty-seat" key={seatId} aria-hidden="true">
+        {Array.from({ length: Math.max(0, MAX_PLAYERS - snapshot.players.length) }, (_, seat) => (
+          <div className="player-tile empty-seat" key={`empty-${seat}`} aria-hidden="true">
             <span>+</span>
           </div>
         ))}
@@ -305,7 +306,7 @@ function LobbyScreen({ snapshot, connectionState, error, onSend, onLeave }: Lobb
               <button
                 className="button button-secondary"
                 type="button"
-                disabled={snapshot.players.length >= 6}
+                disabled={snapshot.players.length >= MAX_PLAYERS}
                 onClick={() => onSend({ type: "lobby.add-bot", difficulty })}
               >
                 {copy.addBot}

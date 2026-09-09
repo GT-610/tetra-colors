@@ -31,7 +31,6 @@
 | `bun run format` | Apply Biome formatting and safe fixes |
 | `bun run deploy` | Build and deploy with Wrangler |
 | `bun run logs` | Tail production Worker logs |
-| `bun run smoke:ws` | Exercise a running local Worker with multiple WebSocket clients |
 
 ## Engineering rules
 

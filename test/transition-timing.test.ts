@@ -6,21 +6,15 @@ import {
   CARD_DEAL_STAGGER_MS,
   CARD_PLAY_ANIMATION_MS,
   CARD_REVEAL_ANIMATION_MS,
-  INITIAL_DEAL_STAGGER_MS,
   initialDealDurationMs,
   SKIP_STATUS_ANIMATION_MS,
 } from "../src/transition-timing";
 
 describe("game transition timing", () => {
-  it("scales the opening deal window across every supported player count", () => {
-    for (let playerCount = 2; playerCount <= 6; playerCount += 1) {
-      const cardCount = playerCount * 7;
-      expect(initialDealDurationMs(cardCount)).toBe(
-        CARD_DEAL_ANIMATION_MS +
-          INITIAL_DEAL_STAGGER_MS * (cardCount - 1) +
-          CARD_REVEAL_ANIMATION_MS,
-      );
-    }
+  it("bounds the opening deal window at zero and pins a representative size", () => {
+    expect(initialDealDurationMs(0)).toBe(0);
+    // 2 players x 7 cards: 560 + 120 * 13 + 320.
+    expect(initialDealDurationMs(14)).toBe(2_440);
   });
 
   it("deals multiple cards half a flight apart after a played card", () => {

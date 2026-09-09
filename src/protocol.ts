@@ -2,6 +2,7 @@ import { isCardColor } from "./logic/deck";
 import type { BotDifficulty, Card, CardColor, PendingPenalty, TurnDirection } from "./logic/types";
 
 export const MAX_NICKNAME_LENGTH = 20;
+export const MAX_PLAYERS = 6;
 export const ROOM_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 export const ROOM_CODE_LENGTH = 5;
 const ROOM_CODE_PATTERN = new RegExp(`^[${ROOM_CODE_ALPHABET}]{${ROOM_CODE_LENGTH}}$`);
@@ -174,7 +175,7 @@ export function isRoomSessionResponse(value: unknown): value is RoomSessionRespo
   );
 }
 
-export function isBotDifficulty(value: unknown): value is BotDifficulty {
+function isBotDifficulty(value: unknown): value is BotDifficulty {
   return value === "easy" || value === "medium" || value === "hard";
 }
 
