@@ -118,7 +118,7 @@ export function canPlayCard(
   return card.kind !== "number" && card.kind === topDiscard.kind;
 }
 
-export function canStackPenalty(
+function canStackPenalty(
   card: Card,
   minimum: 2 | 4,
   topDiscard: Card,

@@ -83,7 +83,7 @@ export function createRoomTransition(
   };
 }
 
-export function addedHandCards(transition: RoomTransition): Card[] {
+function addedHandCards(transition: RoomTransition): Card[] {
   const previousIds = new Set(transition.previous.hand.map((card) => card.id));
   return transition.next.hand.filter((card) => !previousIds.has(card.id));
 }

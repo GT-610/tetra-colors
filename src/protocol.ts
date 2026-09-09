@@ -174,7 +174,7 @@ export function isRoomSessionResponse(value: unknown): value is RoomSessionRespo
   );
 }
 
-export function isBotDifficulty(value: unknown): value is BotDifficulty {
+function isBotDifficulty(value: unknown): value is BotDifficulty {
   return value === "easy" || value === "medium" || value === "hard";
 }
 
