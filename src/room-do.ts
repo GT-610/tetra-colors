@@ -13,6 +13,7 @@ import {
 } from "./logic";
 import {
   isPlayerToken,
+  MAX_PLAYERS,
   normalizeNickname,
   type PublicPlayer,
   parseClientMessage,
@@ -22,15 +23,13 @@ import {
   type ServerErrorCode,
   type ServerMessage,
 } from "./protocol";
-import { botDelayMs } from "./room-timing";
+import { botDelayMs, TURN_DURATION_MS } from "./room-timing";
 import { buildTransitionTimeline, initialDealDurationMs } from "./transition-timing";
 
 const ROOM_STORAGE_KEY = "room";
-const MAX_PLAYERS = 6;
 const MAX_MESSAGE_BYTES = 8_192;
 const ACTIONS_PER_SECOND = 15;
 const RECONNECT_GRACE_MS = 30_000;
-const TURN_DURATION_MS = 30_000;
 const IDLE_ROOM_TTL_MS = 15 * 60_000;
 
 interface RoomPlayer {

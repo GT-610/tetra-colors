@@ -2,6 +2,7 @@ import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useSta
 
 import type { Card, CardColor } from "../../src/logic";
 import type { ClientMessage, RoomEvent, RoomSnapshot } from "../../src/protocol";
+import { TURN_DURATION_MS } from "../../src/room-timing";
 import {
   CARD_DEAL_ANIMATION_MS,
   CARD_PLAY_ANIMATION_MS,
@@ -33,7 +34,6 @@ import type { ConnectionState } from "./room-client";
 import { EVENT_DISPLAY_MS } from "./ui-timing";
 
 const COLOR_ORDER = ["coral", "amber", "teal", "azure"] as const satisfies readonly CardColor[];
-const TURN_DURATION_MS = 30_000;
 const ANIMATION_SETTLE_MS = 50;
 
 interface CardFlight {
@@ -400,16 +400,16 @@ export function GameTable({
               : pendingPenalty && isSelfTurn
                 ? `${copy.penaltyYourTurn} +${pendingPenalty.total}`
                 : pendingPenalty
-                  ? `${currentPlayer?.nickname ?? "玩家"}${copy.penaltyTheirTurn} +${pendingPenalty.total}`
+                  ? `${currentPlayer?.nickname ?? copy.unknownPlayer}${copy.penaltyTheirTurn} +${pendingPenalty.total}`
                   : isSelfTurn
                     ? copy.yourTurn
-                    : `${currentPlayer?.nickname ?? "玩家"}${copy.theirTurn}`}
+                    : `${currentPlayer?.nickname ?? copy.unknownPlayer}${copy.theirTurn}`}
           </strong>
         </div>
         <TurnTimer deadline={game.turnDeadline} paused={transitionActive} />
       </section>
 
-      <section className="table-stage" aria-label="牌桌" ref={stageRef}>
+      <section className="table-stage" aria-label={copy.tableStage} ref={stageRef}>
         {cardFlights.map((flight) => (
           <PlayedCardFlight flight={flight} key={flight.key} />
         ))}
@@ -417,7 +417,7 @@ export function GameTable({
           <DealtCardFlightView flight={flight} key={flight.key} />
         ))}
 
-        <section className="opponent-arc" aria-label="其他玩家">
+        <section className="opponent-arc" aria-label={copy.opponents}>
           {opponentSeats.map(({ player, left, top }, index) => {
             const skip = skipPresentation(player.id, game.skippedPlayerId, transitionPlan);
             return (
@@ -454,7 +454,7 @@ export function GameTable({
           })}
         </section>
 
-        <section className="table-center" aria-label="牌桌中央">
+        <section className="table-center" aria-label={copy.tableCenter}>
           <div
             key={directionNoticeKey(latestEvent)}
             className={`direction-label ${directionNoticeActive ? "direction-changing" : ""}`}
@@ -605,7 +605,7 @@ export function GameTable({
                   aria-label={
                     colorChoiceRequired
                       ? `${copy.chooseColor}：${cardLabel(card)}`
-                      : `打出${cardLabel(card)}`
+                      : `${copy.playVerb}${cardLabel(card)}`
                   }
                 >
                   <CardFace card={card} />
@@ -698,7 +698,7 @@ function TurnTimer({ deadline, paused }: { deadline: number; paused: boolean }) 
   return (
     <div className={`turn-timer ${remainingMs <= 5_000 ? "timer-urgent" : ""}`}>
       <time>{Math.ceil(remainingMs / 1_000)}s</time>
-      <progress max={TURN_DURATION_MS} value={remainingMs} aria-label="回合剩余时间" />
+      <progress max={TURN_DURATION_MS} value={remainingMs} aria-label={copy.turnTimer} />
     </div>
   );
 }
@@ -721,7 +721,7 @@ export function ResultScreen({
           ))}
         </div>
         <p className="section-kicker">{copy.roundFinished}</p>
-        <h1>{winner?.nickname ?? "玩家"}</h1>
+        <h1>{winner?.nickname ?? copy.unknownPlayer}</h1>
         <p className="result-lede">{isWinner ? copy.youWon : copy.playerWon}</p>
         <ol className="result-players">
           {[...snapshot.players]
@@ -797,7 +797,7 @@ function HandColorPicker({
           key={color}
           style={{ "--color-choice-index": index } as ColorChoiceStyle}
           onClick={() => onChoose(color)}
-          aria-label={`选择${copy.colors[color]}`}
+          aria-label={`${copy.chooseVerb}${copy.colors[color]}`}
           data-label={copy.colors[color]}
         >
           <span className={`color-choice-symbol symbol-${color}`} aria-hidden="true" />
@@ -810,10 +810,11 @@ function HandColorPicker({
 function EventToast({ event, snapshot }: { event: RoomEvent; snapshot: RoomSnapshot }) {
   const playerName =
     "playerId" in event
-      ? (snapshot.players.find((player) => player.id === event.playerId)?.nickname ?? "玩家")
+      ? (snapshot.players.find((player) => player.id === event.playerId)?.nickname ??
+        copy.unknownPlayer)
       : "";
   let text: string;
-  if (event.type === "card-played") text = `${playerName}打出${cardLabel(event.card)}`;
+  if (event.type === "card-played") text = `${playerName}${copy.playVerb}${cardLabel(event.card)}`;
   else if (event.type === "cards-drawn") {
     text =
       event.cause === "penalty"
@@ -825,7 +826,8 @@ function EventToast({ event, snapshot }: { event: RoomEvent; snapshot: RoomSnaps
     text = `${playerName}喊出了 ${copy.callFinal}`;
   } else if (event.type === "final-caught") {
     const catcherName =
-      snapshot.players.find((player) => player.id === event.catcherId)?.nickname ?? "玩家";
+      snapshot.players.find((player) => player.id === event.catcherId)?.nickname ??
+      copy.unknownPlayer;
     text = `${catcherName}抓到${playerName}漏喊，${playerName}补了 ${event.count} 张牌`;
   } else if (event.type === "turn-timed-out") text = `${playerName}回合超时，已自动行动`;
   else if (event.type === "player-reconnected") text = `${playerName}已重新连接`;
